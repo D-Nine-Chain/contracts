@@ -98,13 +98,15 @@ mod d9burnmining {
                 return Err(Error::BurnAmountBelowThreshold);
             }
             self.env().transfer(self.pool_contract, burn_amount).expect("Transfer failed.");
-            self.total_amount_burned += burn_amount;
+            self.total_amount_burned = self.total_amount_burned.saturating_add(burn_amount);
             let maybe_account: Option<Account> = self.accounts.get(&self.env().caller().clone());
             let account = match maybe_account {
                 Some(mut account) => {
-                    account.amount_burned += burn_amount;
+                    account.amount_burned = account.amount_burned.saturating_add(burn_amount);
                     account.last_burn = self.env().block_timestamp();
-                    account.balance_due += burn_amount.saturating_mul(3);
+                    account.balance_due = account.balance_due.saturating_add(
+                        burn_amount.saturating_mul(3)
+                    );
                     self.accounts.insert(self.env().caller(), &account);
                     account
                 }

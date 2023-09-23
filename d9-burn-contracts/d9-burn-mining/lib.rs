@@ -2,7 +2,7 @@
 
 #[ink::contract(env = D9Environment)]
 mod d9_burn_mining {
-    use d9_burn_common::{ Account, Error, D9Environment };
+    use d9_burn_common::{ Account, Error, D9Environment, BurnContractInterface };
     use ink::storage::Mapping;
     use sp_arithmetic::Percent;
     //  use d9_chain_extension::D9Environment;
@@ -24,27 +24,7 @@ mod d9_burn_mining {
         accounts: Mapping<AccountId, Account>,
     }
 
-    #[ink(event)]
-    pub struct BurnExecuted {
-        /// initiator of of the burn
-        #[ink(topic)]
-        from: AccountId,
-        ///amount of tokens burned
-        #[ink(topic)]
-        amount: Balance,
-    }
-
-    #[ink(event)]
-    pub struct WithdrawalExecuted {
-        /// initiator of of the burn
-        #[ink(topic)]
-        from: AccountId,
-        ///amount of tokens burned
-        #[ink(topic)]
-        amount: Balance,
-    }
-
-    impl D9burnMining {
+    impl BurnContractInterface for D9burnMining {
         /// Constructor that initializes the `bool` value to the given `init_value`.
         #[ink(constructor)]
         pub fn new(master_portfolio_contract: AccountId) -> Self {
@@ -91,11 +71,12 @@ mod d9_burn_mining {
             &mut self,
             account_id: AccountId,
             burn_amount: Balance
-        ) -> Result<Account, Error> {
+        ) -> Result<Balance, Error> {
             if self.env().caller() != self.master_portfolio_contract {
                 return Err(Error::RestrictedFunction);
             }
-            self._burn(account_id, burn_amount)
+            let account = self._burn(account_id, burn_amount);
+            account.balance_due.saturating_sub(account.balance_paid)
         }
 
         fn _burn(&mut self, account_id: AccountId, amount: Balance) -> Result<Account, Error> {
@@ -134,34 +115,85 @@ mod d9_burn_mining {
             Ok(account)
         }
 
-        /// update the master portfolio from a call executed by a user account
-        fn _update_portfolio(&self, account: Account) -> Result<(), Error> {
-            let portfolio_update_result = build_call::<D9Environment>()
-                .call(self.master_portfolio_contract)
-                .gas_limit(0)
-                .exec_input(
-                    ExecutionInput::new(
-                        Selector::new(ink::selector_bytes!("update_portfolio"))
-                    ).push_arg(account)
-                )
-                .returns::<Result<(), Error>>()
-                .invoke();
-            portfolio_update_result
+        #[ink(message)]
+        pub fn process_withdrawal(
+            &self,
+            account_id: AccountId,
+            amount: Balance
+        ) -> Result<Account, Error> {
+            if self.env().caller() != self.master_portfolio_contract {
+                return Err(Error::RestrictedFunction);
+            }
+            let result = self._process_withdrawal(account_id, amount);
+            match result {
+                Ok(account) => {
+                    let portfolio_update_result = self._update_portfolio(account.clone());
+                    match portfolio_update_result {
+                        Ok(_) => { Ok(account) }
+
+                        Err(e) => {
+                            return Err(e);
+                        }
+                    }
+                }
+                Err(e) => Err(e),
+            }
         }
 
-        //   #[ink(message)]
-        //   pub request_withdraw(&mut self)->Result<(),Error>{}
         #[ink(message)]
-        pub fn withdraw(&mut self) -> Result<Account, Error> {
+        pub fn request_withdrawal(&mut self, amount: Balance) -> Result<Account, Error> {
+            let result = self._process_withdrawal(self.env().caller(), amount);
+            match result {
+                Ok(account) => {}
+                Error => Err(e),
+            }
+        }
+
+        /// A private function that handles the actual withdrawal mechanics for a given account.
+        ///
+        /// This function is intended to be called internally by `process_withdrawal`. Its primary
+        /// responsibility is to handle the underlying withdrawal process. It first validates the withdrawal
+        /// request based on certain conditions (e.g., checking the time since the last withdrawal) and
+        /// calculates the withdrawal allowance. Subsequently, it updates the account's information in storage
+        /// and sends a payout request to the portfolio contract.
+        ///
+        /// # Parameters
+        ///
+        /// - `account_id`: The ID of the account initiating the withdrawal.
+        /// - `amount`: The desired amount to be withdrawn.
+        ///
+        /// # Returns
+        ///
+        /// - `Result<Account, Error>`: If the withdrawal is successful, returns the updated account details.
+        ///   If the withdrawal is unsuccessful, an error will be returned explaining the cause.
+        ///
+        /// # Errors
+        ///
+        /// Potential errors include:
+        /// - `NoAccountFound`: If no account exists for the given `account_id`.
+        /// - `EarlyWithdrawalAttempt`: If an attempt is made to withdraw before the allowed period.
+        /// - Errors resulting from `_request_payout`.
+        ///
+        /// # Notes
+        ///
+        /// The function enforces a cool-down period between consecutive withdrawals. If the last withdrawal
+        /// was within the last 24 hours, the function will reject the withdrawal request.
+        ///
+        /// If after processing the withdrawal, the `balance_due` becomes zero, the account is removed
+        /// from storage.
+        fn _process_withdrawal(
+            &mut self,
+            account_id: AccountId,
+            amount: Balance
+        ) -> Result<Account, Error> {
             pub const DAY: Timestamp = 86_400;
-            let caller = self.env().caller();
-            let maybe_account: Option<Account> = self.accounts.get(&caller);
-            let mut account = match maybe_account {
-                Some(account) => account,
-                None => {
-                    return Err(Error::NoAccountFound);
-                }
-            };
+            let maybe_account: Option<Account> = self.accounts.get(&account_id);
+            if maybe_account.is_none() {
+                return Err(Error::NoAccountFound);
+            }
+            let account = maybe_account.unwrap();
+
+            //validate withdrawal
             let days_since_last_withdraw = self
                 .env()
                 .block_timestamp()
@@ -170,6 +202,31 @@ mod d9_burn_mining {
             if days_since_last_withdraw == 0 {
                 return Err(Error::EarlyWithdrawalAttempt);
             }
+
+            let withdraw_allowance = self._calculate_withdrawal(&account);
+            account.balance_paid = account.balance_paid.saturating_add(withdraw_allowance);
+            account.last_withdrawal = self.env().block_timestamp();
+            account.balance_due = account.balance_due.saturating_sub(withdraw_allowance);
+            self.accounts.insert(caller, &account);
+
+            //request payout from portfolio contract
+            let payout_result = self._request_payout(account_id, withdraw_allowance);
+            match payout_result {
+                Ok(_) => {
+                    if account.balance_due == 0 {
+                        let account_clone: Account = account.clone();
+                        self.accounts.remove(&caller);
+                        return Ok(account_clone);
+                    }
+                    Ok(account)
+                }
+                Err(e) => {
+                    return Err(e);
+                }
+            }
+        }
+
+        fn _calculate_withdrawal(&self, &account: Account) -> Balance {
             let daily_return_percent = self._get_return_percent();
             let withdraw_allowance: Balance = {
                 let allowance = daily_return_percent
@@ -182,25 +239,24 @@ mod d9_burn_mining {
                     allowance
                 }
             };
-            if self.env().balance() < withdraw_allowance {
-                return Err(Error::ContractBalanceTooLow);
-            }
-            self.env().transfer(caller, withdraw_allowance).expect("Transfer failed.");
-            account.balance_paid = account.balance_paid.saturating_add(withdraw_allowance);
-            account.last_withdrawal = self.env().block_timestamp();
-            account.balance_due = account.balance_due.saturating_sub(withdraw_allowance);
-            self.accounts.insert(caller, &account);
-            self.env().emit_event(WithdrawalExecuted {
-                from: caller,
-                amount: withdraw_allowance,
-            });
+            withdraw_allowance
+        }
 
-            if account.balance_due == 0 {
-                let account_clone: Account = account.clone();
-                self.accounts.remove(&caller);
-                return Ok(account_clone);
-            }
-            Ok(account)
+        fn _request_payout(
+            &self,
+            account_id: AccountId,
+            amount: Balance
+        ) -> Result<Account, Error> {
+            let portfolio_payout_result = build_call::<D9Environment>()
+                .call(self.master_portfolio_contract)
+                .gas_limit(0)
+                .exec_input(
+                    ExecutionInput::new(Selector::new(ink::selector_bytes!("request_payout")))
+                        .push_arg(account_id)
+                        .push_arg(amount)
+                )
+                .returns::<Result<(), Error>>()
+                .invoke();
         }
 
         /// the returned percent is used for an accounts return based on the amount burned

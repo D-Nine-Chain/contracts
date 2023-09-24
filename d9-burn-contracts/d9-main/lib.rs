@@ -6,6 +6,25 @@ mod d9_main {
     use d9_burn_common::{ D9Environment, BurnPortfolio, Error, ActionRecord };
     use ink::env::call::{ build_call, ExecutionInput, Selector };
 
+    #[ink(event)]
+    pub struct WithdrawalExecuted {
+        /// initiator of of the burn
+        #[ink(topic)]
+        from: AccountId,
+        ///amount of tokens burned
+        #[ink(topic)]
+        amount: Balance,
+    }
+
+    #[ink(event)]
+    pub struct BurnExecuted {
+        /// initiator of of the burn
+        #[ink(topic)]
+        from: AccountId,
+        ///amount of tokens burned
+        #[ink(topic)]
+        amount: Balance,
+    }
     /// Defines the storage of your contract.
     /// Add new fields to the below struct in order
     /// to add new static storage fields to your contract.
@@ -15,6 +34,8 @@ mod d9_main {
         burn_contracts: Vec<AccountId>,
         /// mapping of accountId and code_hash of logic contract to respective account data
         portfolios: Mapping<AccountId, BurnPortfolio>,
+        /// total amount burned across all contracts
+        total_amount_burned: Balance,
     }
 
     impl D9Main {
@@ -25,6 +46,7 @@ mod d9_main {
                 admin,
                 burn_contracts,
                 portfolios: Default::default(),
+                total_amount_burned: Default::default(),
             }
         }
         /// Burns a specified amount from the caller's account and logs the transaction.
@@ -86,7 +108,11 @@ mod d9_main {
                 time: self.env().block_timestamp(),
                 contract: burn_contract,
             };
-
+            self.total_amount_burned = self.total_amount_burned.saturating_add(burn_amount);
+            self.env().emit_event(BurnExecuted {
+                from: self.env().caller(),
+                amount: burn_amount,
+            });
             //process cross contract call result
             match burn_result {
                 Ok(balance_increment) => {
@@ -116,36 +142,53 @@ mod d9_main {
 
         #[ink(message)]
         pub fn withdraw(&mut self, burn_contract: AccountId) -> Result<BurnPortfolio, Error> {
-            if !self.burn_contracts.contains(burn_contract) {
+            if !self.burn_contracts.contains(&burn_contract) {
                 return Err(Error::InvalidBurnContract);
             }
             let account_id: AccountId = self.env().caller();
-            //todo handle contract balances too low
-            // todo handle withdrawal event
-        }
-
-        #[ink(message)]
-        pub fn request_payout(
-            &mut self,
-            account_id: AccountId,
-            amount: Balance
-        ) -> Result<(), Error> {
-            let caller: AccountId = self.env().caller();
-            //todo cases to consider. contract doesnt have enough money. the balance is too low
-            if !self.contracts.contains(&caller) {
-                return Err(Error::RestrictedFunction);
-            }
             let maybe_portfolio = self.portfolios.get(&account_id);
-            if let Some(mut portfolio) = maybe_portfolio {
-                portfolio.balance_paid = portfolio.balance_paid.saturating_add(amount);
-
-                self.portfolios.insert(account_id, &portfolio);
-                Ok(());
-            } else {
-                Err(Error::NoAccountFound);
+            if maybe_portfolio.is_none() {
+                return Err(Error::NoAccountFound);
             }
-            Ok(())
+            let portfolio = maybe_portfolio.unwrap();
+            let allowance_result = build_call::<D9Environment>()
+                .call(burn_contract)
+                .gas_limit(0)
+                .exec_input(
+                    ExecutionInput::new(
+                        Selector::new(ink::selector_bytes!("portfolio_executed_withdrawal"))
+                    ).push_arg(account_id)
+                )
+                .returns::<Result<(Balance, Timestamp), Error>>()
+                .invoke();
+
+            match allowance_result {
+                Ok((withdrawal_allowance, last_withdrawal_timestamp)) => {
+                    self.env()
+                        .transfer(account_id, withdrawal_allowance)
+                        .expect("Transfer failed.");
+                    self.total_amount_burned =
+                        self.total_amount_burned.saturating_add(withdrawal_allowance);
+                    let updated_portfolio = BurnPortfolio {
+                        amount_burned: portfolio.amount_burned,
+                        balance_due: portfolio.balance_due.saturating_sub(withdrawal_allowance),
+                        balance_paid: portfolio.balance_paid.saturating_add(withdrawal_allowance),
+                        last_withdrawal: Some(ActionRecord {
+                            time: last_withdrawal_timestamp,
+                            contract: burn_contract,
+                        }),
+                        last_burn: portfolio.last_burn,
+                    };
+                    self.portfolios.insert(account_id, &updated_portfolio);
+                    Ok(updated_portfolio)
+                }
+                Err(e) => {
+                    return Err(e);
+                }
+            }
         }
+        //todo add to get portfolio of account
+        //todo add function to add burn contrat
     }
 
     /// Unit tests in Rust are normally defined within such a `#[cfg(test)]`

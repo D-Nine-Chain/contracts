@@ -1,0 +1,24 @@
+[package]
+name = "d9-chain-extension"
+version = "0.1.0"
+authors = ["D9Devs"]
+edition = "2021"
+
+[dependencies]
+ink = { version = "4.2.0", default-features = false }
+ink_env = { version = "4.2.0", default-features = false }
+scale = { package = "parity-scale-codec", version = "3", default-features = false, features = [
+   "derive",
+] }
+scale-info = { version = "2.3", default-features = false, features = [
+   "derive",
+], optional = true }
+
+[lib]
+name = "d9_chain_extension"
+path = "lib.rs"
+
+[features]
+default = ["std"]
+std = ["ink/std", "scale/std", "scale-info/std", "ink_env/std"]
+ink-as-dependency = []

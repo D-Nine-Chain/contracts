@@ -10,12 +10,11 @@ ink_env = { version = "4.2.0", default-features = false }
 scale = { package = "parity-scale-codec", version = "3", default-features = false, features = [
    "derive",
 ] }
-scale-info = { version = "2.3", default-features = false, features = [
+scale-info = { version = "2.6", default-features = false, features = [
    "derive",
 ], optional = true }
 
 [lib]
-name = "d9_chain_extension"
 path = "lib.rs"
 
 [features]

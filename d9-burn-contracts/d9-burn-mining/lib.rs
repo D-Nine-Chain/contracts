@@ -5,40 +5,50 @@ mod d9_burn_mining {
     use d9_burn_common::{ Account, Error, D9Environment };
     use ink::storage::Mapping;
     use sp_arithmetic::Percent;
-    //  use d9_chain_extension::D9Environment;
-
-    /// Defines the storage of your contract.
-    /// Add new fields to the below struct in order
-    /// to add new static storage fields to your contract.
     #[ink(storage)]
     pub struct D9burnMining {
         ///total amount of tokens burned so far globally
         total_amount_burned: Balance,
-        ///the contract that maintains account data for an account with respect to N different burn contracts
-        master_portfolio_contract: AccountId,
+        /// the controller of this contract
+        master_controller_contract: AccountId,
         /// mapping of account ids to account data
         accounts: Mapping<AccountId, Account>,
     }
 
     impl D9burnMining {
-        /// Constructor that initializes the `bool` value to the given `init_value`.
         #[ink(constructor)]
-        pub fn new(master_portfolio_contract: AccountId) -> Self {
-            //todo define a struct to hold account data for what was burned and what was paid out
+        pub fn new(master_controller_contract: AccountId) -> Self {
             Self {
                 total_amount_burned: Default::default(),
-                master_portfolio_contract,
+                master_controller_contract,
                 accounts: Default::default(),
             }
         }
 
+        /// Executes a restricted burn operation.
+        ///
+        /// This function allows only the master controller contract to initiate a burn operation for a given account.
+        /// It ensures the calling contract has the correct permission to burn tokens, then performs the burn operation
+        /// and returns the net balance due (outstanding balance minus paid balance) for the account.
+        ///
+        /// # Parameters
+        /// - `account_id`: The account ID for which the burn operation should be executed.
+        /// - `burn_amount`: The amount of tokens to be burned from the specified account.
+        ///
+        /// # Returns
+        /// - `Ok(Balance)`: If the burn operation is successful, it returns the net balance due for the account.
+        /// - `Err(Error::RestrictedFunction)`: If the calling contract is not the master controller contract.
+        /// - `Err(Error)`: Other errors as reported by the internal `_burn` function.
+        ///
+        /// # Note
+        /// The function performs permission checks to ensure only authorized contracts can initiate the burn.
         #[ink(message)]
-        pub fn portfolio_executed_burn(
+        pub fn controller_restricted_burn(
             &mut self,
             account_id: AccountId,
             burn_amount: Balance
         ) -> Result<Balance, Error> {
-            if self.env().caller() != self.master_portfolio_contract {
+            if self.env().caller() != self.master_controller_contract {
                 return Err(Error::RestrictedFunction);
             }
             let burn_result = self._burn(account_id, burn_amount);
@@ -55,7 +65,7 @@ mod d9_burn_mining {
         /// The function first checks if the specified burn amount is above a set threshold.
         /// If it's below this threshold, the burn request is rejected with a `BurnAmountBelowThreshold` error.
         ///
-        /// The function transfers the burn amount to the `master_portfolio_contract`, updates the
+        /// The function transfers the burn amount to the `master_controller_contract`, updates the
         /// total burned amount of the contract, and then adjusts the details of the account in
         /// the following ways:
         ///
@@ -79,7 +89,7 @@ mod d9_burn_mining {
             if amount < 100_000_000 {
                 return Err(Error::BurnAmountInsufficient);
             }
-            self.env().transfer(self.master_portfolio_contract, amount).expect("Transfer failed.");
+            self.env().transfer(self.master_controller_contract, amount).expect("Transfer failed.");
             self.total_amount_burned = self.total_amount_burned.saturating_add(amount);
             let maybe_account: Option<Account> = self.accounts.get(&account_id);
             let account = match maybe_account {
@@ -107,12 +117,32 @@ mod d9_burn_mining {
             Ok(account)
         }
 
+        /// Executes a withdrawal operation for a portfolio, restricted to the master controller contract.
+        ///
+        /// This function can only be invoked by the master controller contract and is used to process
+        /// withdrawals for a given account from its portfolio. It calculates the allowed withdrawal amount,
+        /// updates the account's records, and then returns the withdrawal amount along with the timestamp
+        /// of the last withdrawal operation.
+        ///
+        /// # Parameters
+        /// - `account_id`: The account ID for which the withdrawal should be executed.
+        ///
+        /// # Returns
+        /// - `Ok((Balance, Timestamp))`: On successful withdrawal, returns the allowed withdrawal amount and
+        ///   the timestamp of the last withdrawal.
+        /// - `Err(Error::RestrictedFunction)`: If the calling contract is not the master controller contract.
+        /// - `Err(Error::NoAccountFound)`: If the specified account does not exist.
+        /// - `Err(Error)`: Other errors as reported by the internal `_update_account` function.
+        ///
+        /// # Note
+        /// Permission checks are performed to ensure only the master controller contract can initiate the withdrawal.
+
         #[ink(message)]
         pub fn portfolio_executed_withdrawal(
             &mut self,
             account_id: AccountId
         ) -> Result<(Balance, Timestamp), Error> {
-            if self.env().caller() != self.master_portfolio_contract {
+            if self.env().caller() != self.master_controller_contract {
                 return Err(Error::RestrictedFunction);
             }
             let maybe_account: Option<Account> = self.accounts.get(&account_id);
@@ -133,6 +163,22 @@ mod d9_burn_mining {
             Ok((withdrawal_allowance, updated_account.unwrap().last_withdrawal))
         }
 
+        /// Calculates the allowed withdrawal amount for a given account based on the time since its last withdrawal.
+        ///
+        /// This function computes the amount an account can withdraw based on the days elapsed
+        /// since its last withdrawal operation. The withdrawal amount is determined using a
+        /// daily return percentage and is limited to the outstanding balance due to the account.
+        ///
+        /// # Parameters
+        /// - `account`: A reference to the account structure for which the withdrawal allowance is to be calculated.
+        ///
+        /// # Returns
+        /// - `Balance`: The calculated withdrawal amount for the given account.
+        ///
+        /// # Note
+        /// The function ensures that withdrawal is only allowed once every 24 hours by checking the difference
+        /// between the current block timestamp and the account's last withdrawal timestamp.
+        /// The daily return percentage is fetched using the `_get_return_percent` internal function.
         fn _calculate_withdrawal(&self, account: &Account) -> Balance {
             pub const DAY: Timestamp = 86_400;
             let days_since_last_withdraw = self
@@ -158,6 +204,23 @@ mod d9_burn_mining {
             withdraw_allowance
         }
 
+        /// Updates an account's records after a withdrawal operation.
+        ///
+        /// This function modifies an account's attributes, including its last withdrawal timestamp,
+        /// total balance paid, and balance due. It then stores the updated account data.
+        ///
+        /// # Parameters
+        /// - `account_id`: The unique identifier of the account being updated.
+        /// - `account`: The current state of the account before the withdrawal.
+        /// - `withdraw_allowance`: The allowed withdrawal amount for the account.
+        ///
+        /// # Returns
+        /// - `Result<Account, Error>`: The updated account state if successful, or an error if the operation fails.
+        ///
+        /// # Note
+        /// The function increments the `balance_paid` by the `withdraw_allowance` and sets the `last_withdrawal`
+        /// timestamp to the current block timestamp. It also reduces the `balance_due` by the withdrawal amount.
+        /// The modified account data is then stored back into the `accounts` storage map.
         fn _update_account(
             &mut self,
             account_id: AccountId,
@@ -218,17 +281,17 @@ mod d9_burn_mining {
         /// We test if the default constructor does its job.
         #[ink::test]
         fn default_works() {
-            let d9referral = D9BurnMining::default();
-            assert_eq!(d9referral.get(), false);
+            let d9_burn_mining = D9burnMining::default();
+            assert_eq!(d9_burn_mining.get(), false);
         }
 
-        /// We test a simple use case of our contract.
-        #[ink::test]
-        fn it_works() {
-            let mut d9referral = D9BurnMining::new(false);
-            assert_eq!(d9referral.get(), false);
-            d9referral.flip();
-            assert_eq!(d9referral.get(), true);
-        }
+        //   /// We test a simple use case of our contract.
+        //   #[ink::test]
+        //   fn it_works() {
+        //       let mut d9referral = D9BurnMining::new(false);
+        //       assert_eq!(d9referral.get(), false);
+        //       d9referral.flip();
+        //       assert_eq!(d9referral.get(), true);
+        //   }
     }
 }

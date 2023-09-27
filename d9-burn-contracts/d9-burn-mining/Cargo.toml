@@ -10,6 +10,7 @@ scale-info = { version = "2.3", default-features = false, features = [
 ], optional = true }
 
 ink = { version = "4.2.0", default-features = false }
+ink_engine = { version = "4.2.0", default-features = false }
 d9-burn-common = { version = "0.1.0", path = "../d9-burn-common" }
 d9-chain-extension = { version = "0.1.0", path = "../../d9-chain-extension" }
 sp-arithmetic = { version = "16.0.0", default-features = false, git = "https://github.com/paritytech/substrate.git" }

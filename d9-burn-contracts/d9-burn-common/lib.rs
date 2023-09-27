@@ -1,3 +1,4 @@
+#![cfg_attr(not(feature = "std"), no_std, no_main)]
 use scale::{ Decode, Encode };
 pub use d9_chain_extension::D9Environment;
 type AccountId = <D9Environment as ink::env::Environment>::AccountId;
@@ -5,10 +6,10 @@ type Balance = <D9Environment as ink::env::Environment>::Balance;
 type Timestamp = <D9Environment as ink::env::Environment>::Timestamp;
 
 /// all values are in aggregate with respect to all contracts
-#[derive(Decode, Encode)]
+#[derive(scale::Decode, scale::Encode)]
 #[cfg_attr(
     feature = "std",
-    derive(Clone, Debug, PartialEq, Eq, scale_info::TypeInfo, ink::storage::traits::StorageLayout)
+    derive(Debug, PartialEq, Eq, scale_info::TypeInfo, ink::storage::traits::StorageLayout)
 )]
 pub struct BurnPortfolio {
     /// Total amount burned through the portfolio.
@@ -25,10 +26,10 @@ pub struct BurnPortfolio {
 
 ///data structure to record the last action that was taken by an account
 /// e.g. last witdrawal, last burn
-#[derive(Decode, Encode)]
+#[derive(scale::Decode, scale::Encode)]
 #[cfg_attr(
     feature = "std",
-    derive(Clone, Debug, PartialEq, Eq, scale_info::TypeInfo, ink::storage::traits::StorageLayout)
+    derive(Debug, PartialEq, Eq, scale_info::TypeInfo, ink::storage::traits::StorageLayout)
 )]
 pub struct ActionRecord {
     pub time: Timestamp,
@@ -38,7 +39,7 @@ pub struct ActionRecord {
 #[derive(Decode, Encode)]
 #[cfg_attr(
     feature = "std",
-    derive(Clone, Debug, PartialEq, Eq, scale_info::TypeInfo, ink::storage::traits::StorageLayout)
+    derive(Debug, PartialEq, Eq, ink::storage::traits::StorageLayout, scale_info::TypeInfo)
 )]
 pub struct Account {
     /// The total amount of assets the account has burned over time.

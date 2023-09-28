@@ -9,7 +9,7 @@ type Timestamp = <D9Environment as ink::env::Environment>::Timestamp;
 #[derive(scale::Decode, scale::Encode)]
 #[cfg_attr(
     feature = "std",
-    derive(Debug, PartialEq, Eq, scale_info::TypeInfo, ink::storage::traits::StorageLayout)
+    derive(Debug, PartialEq, Eq, ink::storage::traits::StorageLayout, scale_info::TypeInfo)
 )]
 pub struct BurnPortfolio {
     /// Total amount burned through the portfolio.
@@ -29,18 +29,15 @@ pub struct BurnPortfolio {
 #[derive(scale::Decode, scale::Encode)]
 #[cfg_attr(
     feature = "std",
-    derive(Debug, PartialEq, Eq, scale_info::TypeInfo, ink::storage::traits::StorageLayout)
+    derive(Debug, PartialEq, Eq, ink::storage::traits::StorageLayout, scale_info::TypeInfo)
 )]
 pub struct ActionRecord {
     pub time: Timestamp,
     pub contract: AccountId,
 }
 
-#[derive(Decode, Encode)]
-#[cfg_attr(
-    feature = "std",
-    derive(Debug, PartialEq, Eq, ink::storage::traits::StorageLayout, scale_info::TypeInfo)
-)]
+#[derive(scale::Decode, scale::Encode, Debug, PartialEq, Eq, Copy, Clone)]
+#[cfg_attr(feature = "std", derive(scale_info::TypeInfo, ink::storage::traits::StorageLayout))]
 pub struct Account {
     /// The total amount of assets the account has burned over time.
     pub amount_burned: Balance,
@@ -74,5 +71,5 @@ pub enum Error {
     // a requested amount is more than what is avaiable in the balance due to the portfolio
     WithdrawalExceedsBalance,
     // error when transfering funds
-    TransferFailed(AccountId, Balance),
+    TransferFailed,
 }

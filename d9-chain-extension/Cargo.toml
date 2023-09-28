@@ -5,14 +5,13 @@ authors = ["D9Devs"]
 edition = "2021"
 
 [dependencies]
-ink = { version = "4.2.0", default-features = false }
-ink_env = { version = "4.2.0", default-features = false }
+ink = { version = "4.3.0", default-features = false }
+ink_env = { version = "4.3.0", default-features = false }
 scale = { package = "parity-scale-codec", version = "3", default-features = false, features = [
    "derive",
 ] }
-scale-info = { version = "2.6", default-features = false, features = [
-   "derive",
-], optional = true }
+
+scale-info = { version = "2.9", default-features = false }
 
 [lib]
 path = "lib.rs"

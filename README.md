@@ -27,3 +27,10 @@ When developing for the D9 Network, especially with ink! contracts, it's essenti
 ```
 
 With the correct Rust version and a keen understanding of the D9 Network's capabilities, developers can craft powerful, efficient, and reliable smart contracts for a wide array of applications.
+
+## Building guide
+
+make sure to use:
+`cargo contract build`
+
+to build all contracts.

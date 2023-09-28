@@ -1,10 +1,13 @@
-#![cfg_attr(not(feature = "std"), no_std)]
+#![cfg_attr(not(feature = "std"), no_std, no_main)]
+
+use d9_burn_common::{ Account, Error, D9Environment };
 
 #[ink::contract(env = D9Environment)]
 mod d9_burn_mining {
-    use d9_burn_common::{ Account, Error, D9Environment };
+    use super::*;
     use ink::storage::Mapping;
-    use sp_arithmetic::Percent;
+    use sp_arithmetic::{ Rounding::NearestPrefDown, Percent };
+
     #[ink(storage)]
     pub struct D9burnMining {
         ///total amount of tokens burned so far globally
@@ -251,10 +254,10 @@ mod d9_burn_mining {
         ///
         fn _get_return_percent(&self) -> Percent {
             let first_threshold_amount: Balance = 200_000_000_000_000;
-            let mut percentage: f64 = 0.008;
-
+            // let mut percentage: f64 = 0.008;
+            let percentage: Percent = Percent::from_rational(8u128, 1000u128);
             if self.total_amount_burned <= first_threshold_amount {
-                return Percent::from_float(percentage);
+                return percentage;
             }
 
             let excess_amount: u128 =
@@ -264,9 +267,10 @@ mod d9_burn_mining {
                 .saturating_add(1);
 
             for _ in 0..reductions {
-                percentage /= 2.0;
+                percentage.saturating_div(Percent::from_rational(2u128, 1u128), NearestPrefDown);
             }
-            Percent::from_float(percentage)
+            // Percent::from_float(percentage)
+            percentage
         }
     }
 

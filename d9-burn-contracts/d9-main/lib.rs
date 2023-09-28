@@ -1,10 +1,10 @@
 #![cfg_attr(not(feature = "std"), no_std, no_main)]
-
+use d9_burn_common::{ BurnPortfolio, ActionRecord, D9Environment, Error };
 #[ink::contract(env = D9Environment)]
 mod d9_main {
+    use super::*;
     use ink::storage::Mapping;
     use ink::prelude::vec::Vec;
-    use d9_burn_common::{ D9Environment, BurnPortfolio, Error, ActionRecord };
     use ink::env::call::{ build_call, ExecutionInput, Selector };
 
     #[ink(event)]

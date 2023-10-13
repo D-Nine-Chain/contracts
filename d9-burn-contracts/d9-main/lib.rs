@@ -50,6 +50,7 @@ mod d9_main {
                 total_amount_burned: Default::default(),
             }
         }
+
         /// Burns a specified amount from the caller's account and logs the transaction.
         ///
         /// This function allows an account to burn an amount, which is then recorded
@@ -188,8 +189,21 @@ mod d9_main {
                 }
             }
         }
-        //todo add to get portfolio of account
-        //todo add function to add burn contrat
+
+        #[ink(message)]
+        pub fn get_admin(&self) -> AccountId {
+            self.admin
+        }
+
+        #[ink(message)]
+        pub fn get_total_burned(&self) -> Balance {
+            self.total_amount_burned
+        }
+
+        #[ink(message)]
+        pub fn get_portfolio(&self, account_id: AccountId) -> Option<BurnPortfolio> {
+            self.portfolios.get(&account_id)
+        }
     }
 
     /// Unit tests in Rust are normally defined within such a `#[cfg(test)]`

@@ -26,6 +26,7 @@ mod d9_main {
         #[ink(topic)]
         amount: Balance,
     }
+
     /// Defines the storage of your contract.
     /// Add new fields to the below struct in order
     /// to add new static storage fields to your contract.
@@ -188,6 +189,19 @@ mod d9_main {
                     return Err(e);
                 }
             }
+        }
+
+        #[ink(message)]
+        pub fn add_burn_contract(&mut self, burn_contract: AccountId) -> Result<(), Error> {
+            if self.burn_contracts.contains(&burn_contract) {
+                return Err(Error::BurnContractAlreadyAdded);
+            }
+            if self.env().caller() != self.admin {
+                return Err(Error::InvalidCaller);
+            }
+            self.burn_contracts.push(burn_contract);
+
+            Ok(())
         }
 
         #[ink(message)]

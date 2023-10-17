@@ -3,6 +3,8 @@ name = "d9-main"
 version = "0.1.0"
 authors = ["D9Dev"]
 edition = "2021"
+[profile.dev]
+overflow-checks = false
 
 [dependencies]
 ink = { version = "4.3.0", default-features = false }
@@ -16,6 +18,7 @@ scale-info = { version = "2.9", default-features = false, features = [
 
 [dev-dependencies]
 ink_e2e = "4.2.0"
+d9-burn-mining = { version = "0.1.0", path = "../d9-burn-mining", default-features = false }
 
 [lib]
 path = "lib.rs"

@@ -6,7 +6,7 @@ type Balance = <D9Environment as ink::env::Environment>::Balance;
 type Timestamp = <D9Environment as ink::env::Environment>::Timestamp;
 
 /// all values are in aggregate with respect to all contracts
-#[derive(scale::Decode, scale::Encode)]
+#[derive(scale::Decode, scale::Encode, Clone)]
 #[cfg_attr(
     feature = "std",
     derive(Debug, PartialEq, Eq, ink::storage::traits::StorageLayout, scale_info::TypeInfo)
@@ -26,13 +26,15 @@ pub struct BurnPortfolio {
 
 ///data structure to record the last action that was taken by an account
 /// e.g. last witdrawal, last burn
-#[derive(scale::Decode, scale::Encode)]
+#[derive(scale::Decode, scale::Encode, Clone)]
 #[cfg_attr(
     feature = "std",
     derive(Debug, PartialEq, Eq, ink::storage::traits::StorageLayout, scale_info::TypeInfo)
 )]
 pub struct ActionRecord {
+    /// timestamp of the last action in milliseconds
     pub time: Timestamp,
+    /// account_id of contract that was interacted with
     pub contract: AccountId,
 }
 
@@ -46,7 +48,7 @@ pub struct Account {
     /// The total amount that has been paid out or settled to the account.
     pub balance_paid: Balance,
     /// The timestamp of the last withdrawal operation made by the account.
-    pub last_withdrawal: Timestamp,
+    pub last_withdrawal: Option<Timestamp>,
     /// The timestamp of the last burn operation conducted by the account.
     pub last_burn: Timestamp,
 }
@@ -56,8 +58,6 @@ pub struct Account {
 pub enum Error {
     /// The burn amount provided is zero or insufficient.
     BurnAmountInsufficient,
-    /// The specified burn logic is not valid.
-    InvalidBurnContract,
     /// The account in question was not found.
     NoAccountFound,
     /// An attempt was made to withdraw funds within a 24-hour limit.
@@ -70,6 +70,14 @@ pub enum Error {
     UsePortfolioExecuteFunction,
     // a requested amount is more than what is avaiable in the balance due to the portfolio
     WithdrawalExceedsBalance,
-    // error when transfering funds
+    /// error when transfering funds
     TransferFailed,
+    /// restricted function called by an unauthorized account
+    InvalidCaller,
+    /// The specified burn logic is not valid.
+    InvalidBurnContract,
+    /// main contract already has this burn contract
+    BurnContractAlreadyAdded,
+    CrossContractCallFailed,
+    WithdrawalNotAllowed,
 }

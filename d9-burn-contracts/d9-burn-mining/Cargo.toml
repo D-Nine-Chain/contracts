@@ -3,7 +3,7 @@ name = "d9-burn-mining"
 version = "0.1.0"
 authors = ["D9Dev"]
 edition = "2021"
-
+# [profile.release]
 [dependencies]
 ink = { version = "4.3.0", default-features = false }
 d9-burn-common = { version = "0.1.0", path = "../d9-burn-common", default-features = false }
@@ -13,7 +13,7 @@ scale = { package = "parity-scale-codec", version = "3", default-features = fals
 scale-info = { version = "2.9", default-features = false, features = [
    "derive",
 ], optional = true }
-sp-arithmetic = { version = "18", default-features = false }
+sp-arithmetic = { version = "19", default-features = false }
 
 [dev-dependencies]
 ink_e2e = "4.2.0"

@@ -1,12 +1,13 @@
 #![cfg_attr(not(feature = "std"), no_std, no_main)]
 
-use d9_burn_common::{ Account, Error, D9Environment };
+use d9_burn_common::{ Account, D9Environment, Error };
 
 #[ink::contract(env = D9Environment)]
-mod d9_burn_mining {
+// #[ink::contract(env = D9Environment)]
+pub mod d9_burn_mining {
     use super::*;
     use ink::storage::Mapping;
-    use sp_arithmetic::{ Rounding::NearestPrefDown, Percent };
+    use sp_arithmetic::{ Rounding::NearestPrefDown, Perbill };
 
     #[ink(storage)]
     pub struct D9burnMining {
@@ -16,18 +17,24 @@ mod d9_burn_mining {
         master_controller_contract: AccountId,
         /// mapping of account ids to account data
         accounts: Mapping<AccountId, Account>,
+        ///minimum permissible burn amount
+        burn_minimum: Balance,
     }
 
     impl D9burnMining {
-        #[ink(constructor)]
-        pub fn new(master_controller_contract: AccountId) -> Self {
+        #[ink(constructor, payable)]
+        pub fn new(master_controller_contract: AccountId, burn_minimum: Balance) -> Self {
             Self {
                 total_amount_burned: Default::default(),
                 master_controller_contract,
                 accounts: Default::default(),
+                burn_minimum,
             }
         }
-
+        #[ink(message)]
+        pub fn get_account(&self, account_id: AccountId) -> Option<Account> {
+            self.accounts.get(&account_id)
+        }
         /// Executes a restricted burn operation.
         ///
         /// This function allows only the master controller contract to initiate a burn operation for a given account.
@@ -51,73 +58,52 @@ mod d9_burn_mining {
             account_id: AccountId,
             burn_amount: Balance
         ) -> Result<Balance, Error> {
-            if self.env().caller() != self.master_controller_contract {
-                return Err(Error::RestrictedFunction);
-            }
-            let burn_result = self._burn(account_id, burn_amount);
-            if burn_result.is_err() {
-                return Err(burn_result.unwrap_err());
-            }
-            let account = burn_result.unwrap();
-            Ok(account.balance_due.saturating_sub(account.balance_paid))
-        }
-
-        /// Burns the specified amount from the given account, updating the total burned amount
-        /// and the account's details.
-        ///
-        /// The function first checks if the specified burn amount is above a set threshold.
-        /// If it's below this threshold, the burn request is rejected with a `BurnAmountBelowThreshold` error.
-        ///
-        /// The function transfers the burn amount to the `master_controller_contract`, updates the
-        /// total burned amount of the contract, and then adjusts the details of the account in
-        /// the following ways:
-        ///
-        /// 1. If the account already exists, the function updates the amount burned, the last burn timestamp,
-        ///    and increments the balance due by three times the burned amount.
-        /// 2. If the account doesn't exist, a new account is created with the provided burn details.
-        ///
-        /// An event `BurnExecuted` is emitted after a successful burn operation.
-        ///
-        /// # Parameters
-        ///
-        /// * `account_id`: The ID of the account from which the amount will be burned.
-        /// * `amount`: The amount to be burned.
-        ///
-        /// # Returns
-        ///
-        /// A `Result` indicating the success or failure of the burn operation. On success,
-        /// it returns the updated `Account` state, and on failure, it provides an associated `Error`.
-        ///
-        fn _burn(&mut self, account_id: AccountId, amount: Balance) -> Result<Account, Error> {
-            if amount < 100_000_000 {
+            // assert!(
+            //     self.env().caller() != self.master_controller_contract,
+            //     "Caller is not the master controller contract."
+            // );
+            if burn_amount < self.burn_minimum {
                 return Err(Error::BurnAmountInsufficient);
             }
-            self.env().transfer(self.master_controller_contract, amount).expect("Transfer failed.");
+
+            let balance_increase = self._burn(account_id, burn_amount);
+
+            Ok(balance_increase)
+        }
+
+        /// Burns a specified amount of tokens from the account's balance and updates the account's records.
+        ///
+        /// Parameters:
+        /// - `account_id`: The ID of the account from which tokens are to be burned.
+        /// - `amount`: The amount of tokens to be burned.
+        ///
+        /// Returns:
+        /// - `Ok`: with the balance that the account is due after the burn.
+        /// - `Err`: if the burn amount is less than the allowed minimum.
+        fn _burn(&mut self, account_id: AccountId, amount: Balance) -> Balance {
             self.total_amount_burned = self.total_amount_burned.saturating_add(amount);
-            let maybe_account: Option<Account> = self.accounts.get(&account_id);
-            let account = match maybe_account {
-                Some(mut account) => {
-                    account.amount_burned = account.amount_burned.saturating_add(amount);
-                    account.last_burn = self.env().block_timestamp();
-                    account.balance_due = account.balance_due.saturating_add(
-                        amount.saturating_mul(3)
-                    );
-                    self.accounts.insert(self.env().caller(), &account);
-                    account
-                }
-                None => {
-                    let account = Account {
-                        amount_burned: amount,
-                        balance_due: amount.saturating_mul(3),
-                        balance_paid: 0,
-                        last_withdrawal: 0,
-                        last_burn: self.env().block_timestamp(),
-                    };
-                    self.accounts.insert(self.env().caller(), &account);
-                    account
-                }
-            };
-            Ok(account)
+
+            // The balance the account is due after the burn
+            let balance_due = amount.saturating_mul(3);
+
+            // Fetch the account if it exists, or initialize a new one if it doesn't
+            let mut account = self.accounts.get(&account_id).unwrap_or(Account {
+                amount_burned: 0,
+                balance_due: 0,
+                balance_paid: 0,
+                last_withdrawal: None,
+                last_burn: 0,
+            });
+
+            // Update account details
+            account.amount_burned = account.amount_burned.saturating_add(amount);
+            account.last_burn = self.env().block_timestamp();
+            account.balance_due = account.balance_due.saturating_add(balance_due);
+
+            // Insert the updated account details back into storage
+            self.accounts.insert(account_id, &account);
+
+            balance_due
         }
 
         /// Executes a withdrawal operation for a portfolio, restricted to the master controller contract.
@@ -145,25 +131,24 @@ mod d9_burn_mining {
             &mut self,
             account_id: AccountId
         ) -> Result<(Balance, Timestamp), Error> {
-            if self.env().caller() != self.master_controller_contract {
-                return Err(Error::RestrictedFunction);
-            }
-            let maybe_account: Option<Account> = self.accounts.get(&account_id);
-            if maybe_account.is_none() {
-                return Err(Error::NoAccountFound);
-            }
-            let account = maybe_account.unwrap();
+            // if self.env().caller() != self.master_controller_contract {
+            //     return Err(Error::RestrictedFunction);
+            // }
+
+            let account = self.accounts.get(&account_id).ok_or(Error::NoAccountFound)?;
+
             let withdrawal_allowance = self._calculate_withdrawal(&account);
+            if withdrawal_allowance == 0 {
+                return Err(Error::WithdrawalNotAllowed);
+            }
+
             let updated_account = self._update_account(
                 account_id,
                 account,
                 withdrawal_allowance.clone()
             );
-            if updated_account.is_err() {
-                return Err(updated_account.unwrap_err());
-            }
 
-            Ok((withdrawal_allowance, updated_account.unwrap().last_withdrawal))
+            Ok((withdrawal_allowance, updated_account.last_withdrawal.unwrap()))
         }
 
         /// Calculates the allowed withdrawal amount for a given account based on the time since its last withdrawal.
@@ -183,59 +168,49 @@ mod d9_burn_mining {
         /// between the current block timestamp and the account's last withdrawal timestamp.
         /// The daily return percentage is fetched using the `_get_return_percent` internal function.
         fn _calculate_withdrawal(&self, account: &Account) -> Balance {
-            pub const DAY: Timestamp = 86_400;
+            pub const DAY: Timestamp = 600000;
+            let last_withdrawal = match account.last_withdrawal {
+                Some(timestamp) => timestamp,
+                None => self.env().block_timestamp(),
+            };
             let days_since_last_withdraw = self
                 .env()
                 .block_timestamp()
-                .saturating_sub(account.last_withdrawal)
+                .saturating_sub(last_withdrawal)
                 .saturating_div(DAY);
-            if days_since_last_withdraw == 0 {
-                return 0;
-            }
-            let daily_return_percent = self._get_return_percent();
-            let withdraw_allowance: Balance = {
-                let allowance = daily_return_percent
-                    .mul_floor(account.balance_due)
-                    .saturating_mul(days_since_last_withdraw as u128);
 
-                if allowance > account.balance_due {
-                    account.balance_due
-                } else {
-                    allowance
-                }
-            };
-            withdraw_allowance
+            let daily_return_percent = self._get_return_percent();
+
+            let daily_allowance = daily_return_percent * account.balance_due;
+            // Multiply the daily allowance by the number of days since the last withdrawal
+            let allowance = daily_allowance.saturating_mul(days_since_last_withdraw as u128); // cast needed here for arithmetic
+
+            allowance
         }
 
-        /// Updates an account's records after a withdrawal operation.
+        /// Updates the account's balances and withdrawal timestamp after a withdrawal operation.
         ///
-        /// This function modifies an account's attributes, including its last withdrawal timestamp,
-        /// total balance paid, and balance due. It then stores the updated account data.
+        /// Parameters:
+        /// - `account_id`: The ID of the account to update.
+        /// - `account`: The account data that needs to be updated.
+        /// - `withdraw_allowance`: The amount that has been allowed to withdraw.
         ///
-        /// # Parameters
-        /// - `account_id`: The unique identifier of the account being updated.
-        /// - `account`: The current state of the account before the withdrawal.
-        /// - `withdraw_allowance`: The allowed withdrawal amount for the account.
-        ///
-        /// # Returns
-        /// - `Result<Account, Error>`: The updated account state if successful, or an error if the operation fails.
-        ///
-        /// # Note
-        /// The function increments the `balance_paid` by the `withdraw_allowance` and sets the `last_withdrawal`
-        /// timestamp to the current block timestamp. It also reduces the `balance_due` by the withdrawal amount.
-        /// The modified account data is then stored back into the `accounts` storage map.
+        /// Returns:
+        /// - The updated account data.
         fn _update_account(
             &mut self,
             account_id: AccountId,
             mut account: Account,
             withdraw_allowance: Balance
-        ) -> Result<Account, Error> {
-            let last_withdrawal = self.env().block_timestamp();
-            account.balance_paid = account.balance_paid.saturating_add(withdraw_allowance);
-            account.last_withdrawal = last_withdrawal;
+        ) -> Account {
+            // Update the account's details
+            account.last_withdrawal = Some(self.env().block_timestamp());
             account.balance_due = account.balance_due.saturating_sub(withdraw_allowance);
-            self.accounts.insert(account_id, &account);
-            Ok(account.clone())
+            account.balance_paid = account.balance_paid.saturating_add(withdraw_allowance);
+
+            // Insert the updated account details back into storage and return the updated account
+            self.accounts.insert(account_id, &account.clone());
+            account
         }
 
         /// the returned percent is used for an accounts return based on the amount burned
@@ -252,10 +227,10 @@ mod d9_burn_mining {
         ///
         /// Returns a `Percent` value representing the return percentage.
         ///
-        fn _get_return_percent(&self) -> Percent {
-            let first_threshold_amount: Balance = 200_000_000_000_000;
+        fn _get_return_percent(&self) -> Perbill {
+            let first_threshold_amount: Balance = 200_000_000_000_000_000_000;
             // let mut percentage: f64 = 0.008;
-            let percentage: Percent = Percent::from_rational(8u128, 1000u128);
+            let percentage: Perbill = Perbill::from_rational(8u32, 1000u32);
             if self.total_amount_burned <= first_threshold_amount {
                 return percentage;
             }
@@ -263,13 +238,12 @@ mod d9_burn_mining {
             let excess_amount: u128 =
                 self.total_amount_burned.saturating_sub(first_threshold_amount);
             let reductions: u128 = excess_amount
-                .saturating_div(100_000_000_000_000)
+                .saturating_div(100_000_000_000_000_000_000)
                 .saturating_add(1);
 
             for _ in 0..reductions {
-                percentage.saturating_div(Percent::from_rational(2u128, 1u128), NearestPrefDown);
+                percentage.saturating_div(Perbill::from_rational(2u128, 1u128), NearestPrefDown);
             }
-            // Percent::from_float(percentage)
             percentage
         }
     }
@@ -282,20 +256,109 @@ mod d9_burn_mining {
         /// Imports all the definitions from the outer scope so we can use them here.
         use super::*;
 
-        /// We test if the default constructor does its job.
         #[ink::test]
-        fn default_works() {
-            let d9_burn_mining = D9burnMining::default();
-            assert_eq!(d9_burn_mining.get(), false);
+        fn update_account_balances() {
+            let accounts = ink::env::test::default_accounts::<ink::env::DefaultEnvironment>();
+            let old_account = Account {
+                amount_burned: 1000,
+                balance_due: 3000,
+                balance_paid: 0,
+                last_withdrawal: None,
+                last_burn: 0,
+            };
+            let withdraw_allowance = 1000;
+            let mut d9_burn_mining = D9burnMining::new(accounts.alice, 1000);
+            let updated_account = d9_burn_mining._update_account(
+                accounts.alice,
+                old_account,
+                withdraw_allowance
+            );
+            assert_eq!(updated_account.balance_due, 2000);
+            assert_eq!(updated_account.balance_paid, 1000);
+            let retrieved_account = d9_burn_mining.accounts.get(&accounts.alice).unwrap();
+            //just to make sure that what is stored on contract is the updated version
+            assert_eq!(retrieved_account, updated_account)
         }
 
-        //   /// We test a simple use case of our contract.
-        //   #[ink::test]
-        //   fn it_works() {
-        //       let mut d9referral = D9BurnMining::new(false);
-        //       assert_eq!(d9referral.get(), false);
-        //       d9referral.flip();
-        //       assert_eq!(d9referral.get(), true);
-        //   }
+        #[ink::test]
+        fn unpermitted_withdraw() {
+            let accounts = ink::env::test::default_accounts::<ink::env::DefaultEnvironment>();
+            let mut d9_burn_mining = D9burnMining::new(accounts.alice, 1000);
+            let account = Account {
+                amount_burned: 1000,
+                balance_due: 3000,
+                balance_paid: 0,
+                last_withdrawal: None,
+                last_burn: 0,
+            };
+            let withdrawal_allowance = d9_burn_mining._calculate_withdrawal(&account);
+            assert_eq!(withdrawal_allowance, 0);
+        }
+
+        /// Advances the block by one and updates the timestamp by the given seconds.
+        fn advance_time_and_block(seconds: u64) {
+            let current_time: Timestamp =
+                ink::env::block_timestamp::<ink::env::DefaultEnvironment>();
+            ink::env::test::set_block_timestamp::<ink::env::DefaultEnvironment>(
+                current_time + seconds
+            );
+            ink::env::test::advance_block::<ink::env::DefaultEnvironment>();
+        }
+
+        #[ink::test]
+        fn calculate_withdraw() {
+            // Setting initial conditions
+            let last_withdrawal = Some(1000);
+            let accounts = ink::env::test::default_accounts::<ink::env::DefaultEnvironment>();
+            let mut d9_burn_mining = D9burnMining::new(accounts.alice, 1000);
+
+            // Simulating account setup
+            let mut account = Account {
+                amount_burned: 200_000_000_000_000,
+                balance_due: 600_000_000_000_000,
+                balance_paid: 0,
+                last_withdrawal,
+                last_burn: 0,
+            };
+            d9_burn_mining.accounts.insert(accounts.alice, &account);
+            let no_allowance = d9_burn_mining._calculate_withdrawal(&account);
+            assert!(no_allowance == 0);
+            // Comment about what we're simulating with this time jump, e.g., "Simulating one day passing"
+            advance_time_and_block(10_000_000);
+            let withdrawal_allowance = d9_burn_mining._calculate_withdrawal(&account);
+            println!("withdrawal_allowance: {}", withdrawal_allowance);
+            // assert!(withdrawal_allowance > 0);
+        }
+
+        #[ink::test]
+        fn portfolio_executed_withdrawal() {
+            // Setting initial conditions
+            let last_withdrawal = Some(1000);
+            let accounts = ink::env::test::default_accounts::<ink::env::DefaultEnvironment>();
+            let mut d9_burn_mining = D9burnMining::new(accounts.alice, 1000);
+
+            // Simulating account setup
+            let mut account = Account {
+                amount_burned: 200_000_000_000_000,
+                balance_due: 600_000_000_000_000,
+                balance_paid: 0,
+                last_withdrawal,
+                last_burn: 0,
+            };
+            d9_burn_mining.accounts.insert(accounts.alice, &account);
+            advance_time_and_block(600_000);
+
+            let result = d9_burn_mining.portfolio_executed_withdrawal(accounts.alice);
+            if let Ok((withdraw_allowance, timestamp)) = result {
+                println!("withdraw_allowance: {}", withdraw_allowance);
+                println!("timestamp: {}", timestamp);
+
+                let account = d9_burn_mining.accounts.get(&accounts.alice).unwrap();
+                println!("account balance due: {}", account.balance_due);
+                println!("account balance paid: {}", account.balance_paid);
+            }
+
+            // Comment about what we're simulating with this time jump, e.g., "Simulating one day passing"
+        }
     }
 }

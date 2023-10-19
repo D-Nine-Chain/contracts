@@ -23,7 +23,24 @@ pub struct BurnPortfolio {
     /// Timestamp or record of the last burn action within the portfolio.
     pub last_burn: ActionRecord,
 }
-
+impl BurnPortfolio {
+    pub fn credit_burn(&mut self, amount: Balance, timestamp: Timestamp, contract: AccountId) {
+        self.amount_burned = self.amount_burned.saturating_add(amount);
+        self.balance_due = self.balance_due.saturating_add(amount);
+        self.last_burn = ActionRecord {
+            time: timestamp,
+            contract: contract,
+        };
+    }
+    pub fn update_balance(&mut self, amount: Balance, timestamp: Timestamp, contract: AccountId) {
+        self.balance_due = self.balance_due.saturating_sub(amount);
+        self.balance_paid = self.balance_paid.saturating_add(amount);
+        self.last_withdrawal = Some(ActionRecord {
+            time: timestamp,
+            contract: contract,
+        });
+    }
+}
 ///data structure to record the last action that was taken by an account
 /// e.g. last witdrawal, last burn
 #[derive(scale::Decode, scale::Encode, Clone)]
@@ -41,6 +58,8 @@ pub struct ActionRecord {
 #[derive(scale::Decode, scale::Encode, Debug, PartialEq, Eq, Copy, Clone)]
 #[cfg_attr(feature = "std", derive(scale_info::TypeInfo, ink::storage::traits::StorageLayout))]
 pub struct Account {
+    ///timestamp when account created
+    pub creation_timestamp: Timestamp,
     /// The total amount of assets the account has burned over time.
     pub amount_burned: Balance,
     /// The outstanding amount owed or due to the account
@@ -78,6 +97,12 @@ pub enum Error {
     InvalidBurnContract,
     /// main contract already has this burn contract
     BurnContractAlreadyAdded,
+    /// call between contracts failed
     CrossContractCallFailed,
+    /// withdrawal not permitted due to time constraint
     WithdrawalNotAllowed,
+    ///error getting ancestors from runtime
+    /// then runtime returned an empty Ancestors array. shouldnt happen but just in case
+    RuntimeErrorGettingAncestors,
+    NoAncestorsFound,
 }

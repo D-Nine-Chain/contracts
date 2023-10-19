@@ -140,14 +140,12 @@ mod d9_main {
             }
 
             // Attempt to pay ancestors
-            if let Ok(ancestors) = self.get_ancestors(account_id) {
-                if !ancestors.is_empty() {
-                    let remainder = self.pay_ancestors(withdraw_allowance, &ancestors)?;
-                    portfolio.update_balance(remainder, last_withdrawal_timestamp, burn_contract);
-                    self.portfolios.insert(account_id, &portfolio);
-                    self.transfer(account_id, remainder)?;
-                    return Ok(portfolio.clone());
-                }
+            if let Some(ancestors) = self.get_ancestors(account_id) {
+                let remainder = self.pay_ancestors(withdraw_allowance, &ancestors)?;
+                portfolio.update_balance(remainder, last_withdrawal_timestamp, burn_contract);
+                self.portfolios.insert(account_id, &portfolio);
+                self.transfer(account_id, remainder)?;
+                return Ok(portfolio.clone());
             }
 
             // If no ancestors are found or payment fails, process withdrawal normally
@@ -158,11 +156,12 @@ mod d9_main {
         }
 
         #[ink(message)]
-        pub fn get_ancestors(&self, account_id: AccountId) -> Result<Vec<AccountId>, Error> {
-            self.env()
-                .extension()
-                .get_ancestors(account_id)
-                .map_err(|_| Error::ErrorGettingAncestors)
+        pub fn get_ancestors(&self, account_id: AccountId) -> Option<Vec<AccountId>> {
+            let result = self.env().extension().get_ancestors(account_id);
+            match result {
+                Ok(ancestors) => ancestors,
+                Err(_) => None,
+            }
         }
 
         #[ink(message)]
@@ -235,7 +234,7 @@ mod d9_main {
                 .returns::<Result<(Balance, Timestamp), Error>>()
                 .invoke()
         }
-        //update_balance(withdraw_allowance, last_withdrawal_timestamp, burn_contract);
+
         fn pay_ancestors(
             &self,
             allowance: Balance,

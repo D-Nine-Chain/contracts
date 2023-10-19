@@ -1,6 +1,6 @@
 #![cfg_attr(not(feature = "std"), no_std, no_main)]
 use ink::{ env::Environment, prelude::vec::Vec };
-
+use scale::{ Decode, Encode };
 #[derive(Debug, Clone, PartialEq, Eq)]
 #[cfg_attr(feature = "std", derive(scale_info::TypeInfo))]
 pub enum D9Environment {}
@@ -28,21 +28,15 @@ pub trait D9ChainExtension {
     #[ink(extension = 1)]
     fn get_ancestors(
         referree: <D9Environment as Environment>::AccountId
-    ) -> Result<Vec<<D9Environment as Environment>::AccountId>, RuntimeError>;
+    ) -> Result<Option<Vec<<D9Environment as Environment>::AccountId>>, RuntimeError>;
 
     #[ink(extension = 2)]
     fn burn(burn_amount: <D9Environment as Environment>::Balance) -> Result<(), RuntimeError>;
 }
 
-#[derive(scale::Encode, scale::Decode)]
+#[derive(Encode, Decode, Debug, PartialEq, Eq, Copy, Clone)]
 #[cfg_attr(feature = "std", derive(scale_info::TypeInfo))]
 pub enum RuntimeError {
-    /// Indicates that no referral account record was found.
-    ///
-    /// This error is returned when an operation expects a referral account
-    /// to exist, but no such record is present in the system. This could occur
-    /// due to a missing or incorrect account identifier, or if the referral account
-    /// was never registered.
     NoReferralAccountRecord,
 }
 

@@ -7,7 +7,7 @@ mod d9_main {
     use ink::storage::Mapping;
     use ink::prelude::vec::Vec;
     use ink::env::call::{ build_call, ExecutionInput, Selector };
-
+    use sp_arithmetic::{ Perbill };
     #[ink(event)]
     pub struct WithdrawalExecuted {
         /// initiator of of the burn
@@ -40,7 +40,7 @@ mod d9_main {
         /// total amount burned across all contracts
         total_amount_burned: Balance,
     }
-
+    // /pdate_balance(remainder, last_withdrawal_timestamp, burn_contract);
     impl D9Main {
         /// Constructor that initializes the `bool` value to the given `init_value`.
         #[ink(constructor, payable)]
@@ -84,20 +84,7 @@ mod d9_main {
             }
 
             // Make the cross-contract call
-            let balance_increase = match
-                build_call::<D9Environment>()
-                    .call(burn_contract)
-                    .gas_limit(0) // replace with an appropriate gas limit
-                    .exec_input(
-                        ExecutionInput::new(
-                            Selector::new(ink::selector_bytes!("controller_restricted_burn"))
-                        )
-                            .push_arg(caller)
-                            .push_arg(burn_amount)
-                    )
-                    .returns::<Result<Balance, Error>>()
-                    .invoke()
-            {
+            let balance_increase = match self.execute_burn(caller, burn_amount, burn_contract) {
                 Ok(balance) => balance,
                 Err(e) => {
                     return Err(e);
@@ -133,37 +120,49 @@ mod d9_main {
 
         #[ink(message)]
         pub fn withdraw(&mut self, burn_contract: AccountId) -> Result<BurnPortfolio, Error> {
-            self.burn_contracts
-                .contains(&burn_contract)
-                .then(|| ())
-                .ok_or(Error::InvalidBurnContract)?;
+            // Check if the contract is valid
+            if !self.burn_contracts.contains(&burn_contract) {
+                return Err(Error::InvalidBurnContract);
+            }
 
             let account_id: AccountId = self.env().caller();
             let mut portfolio = self.portfolios.get(&account_id).ok_or(Error::NoAccountFound)?;
 
-            let (withdraw_allowance, last_withdrawal_timestamp) = build_call::<D9Environment>()
-                .call(burn_contract)
-                .gas_limit(0)
-                .exec_input(
-                    ExecutionInput::new(
-                        Selector::new(ink::selector_bytes!("portfolio_executed_withdrawal"))
-                    ).push_arg(account_id)
-                )
-                .returns::<Result<(Balance, Timestamp), Error>>()
-                .invoke()?;
+            // Get the withdrawal allowance and timestamp
+            let (withdraw_allowance, last_withdrawal_timestamp) = self.get_withdrawal_info(
+                burn_contract,
+                account_id
+            )?;
+
+            // If there's no allowance, return early
             if withdraw_allowance == 0 {
                 return Ok(portfolio);
             }
-            portfolio.balance_due = portfolio.balance_due.saturating_sub(withdraw_allowance);
-            portfolio.balance_paid = portfolio.balance_paid.saturating_add(withdraw_allowance);
-            portfolio.last_withdrawal = Some(ActionRecord {
-                time: last_withdrawal_timestamp,
-                contract: burn_contract,
-            });
 
+            // Attempt to pay ancestors
+            if let Ok(ancestors) = self.get_ancestors(account_id) {
+                if !ancestors.is_empty() {
+                    let remainder = self.pay_ancestors(withdraw_allowance, &ancestors)?;
+                    portfolio.update_balance(remainder, last_withdrawal_timestamp, burn_contract);
+                    self.portfolios.insert(account_id, &portfolio);
+                    self.transfer(account_id, remainder)?;
+                    return Ok(portfolio.clone());
+                }
+            }
+
+            // If no ancestors are found or payment fails, process withdrawal normally
+            portfolio.update_balance(withdraw_allowance, last_withdrawal_timestamp, burn_contract);
             self.portfolios.insert(account_id, &portfolio);
-
+            self.transfer(account_id, withdraw_allowance)?;
             Ok(portfolio.clone())
+        }
+
+        #[ink(message)]
+        pub fn get_ancestors(&self, account_id: AccountId) -> Result<Vec<AccountId>, Error> {
+            self.env()
+                .extension()
+                .get_ancestors(account_id)
+                .map_err(|_| Error::ErrorGettingAncestors)
         }
 
         #[ink(message)]
@@ -198,6 +197,72 @@ mod d9_main {
         #[ink(message)]
         pub fn get_portfolio(&self, account_id: AccountId) -> Option<BurnPortfolio> {
             self.portfolios.get(&account_id)
+        }
+
+        fn execute_burn(
+            &self,
+            account_id: AccountId,
+            burn_amount: Balance,
+            burn_contract: AccountId
+        ) -> Result<Balance, Error> {
+            build_call::<D9Environment>()
+                .call(burn_contract)
+                .gas_limit(0) // replace with an appropriate gas limit
+                .exec_input(
+                    ExecutionInput::new(
+                        Selector::new(ink::selector_bytes!("controller_restricted_burn"))
+                    )
+                        .push_arg(account_id)
+                        .push_arg(burn_amount)
+                )
+                .returns::<Result<Balance, Error>>()
+                .invoke()
+        }
+
+        fn get_withdrawal_info(
+            &self,
+            burn_contract: AccountId,
+            account_id: AccountId
+        ) -> Result<(Balance, Timestamp), Error> {
+            build_call::<D9Environment>()
+                .call(burn_contract)
+                .gas_limit(0)
+                .exec_input(
+                    ExecutionInput::new(
+                        Selector::new(ink::selector_bytes!("portfolio_executed_withdrawal"))
+                    ).push_arg(account_id)
+                )
+                .returns::<Result<(Balance, Timestamp), Error>>()
+                .invoke()
+        }
+        //update_balance(withdraw_allowance, last_withdrawal_timestamp, burn_contract);
+        fn pay_ancestors(
+            &self,
+            allowance: Balance,
+            ancestors: &[AccountId]
+        ) -> Result<Balance, Error> {
+            let mut remainder = allowance;
+
+            // Calculate 10% for the parent
+            let ten_percent = Perbill::from_percent(10).mul_floor(allowance);
+            let parent = ancestors[0];
+            self.transfer(parent, ten_percent)?;
+            remainder = remainder.saturating_sub(ten_percent);
+
+            // Calculate 1% for the rest of the ancestors
+            let one_percent = Perbill::from_percent(1).mul_floor(allowance);
+            for ancestor in ancestors.iter().skip(1) {
+                self.transfer(*ancestor, one_percent)?;
+                remainder = remainder.saturating_sub(one_percent);
+            }
+
+            Ok(remainder)
+        }
+
+        fn transfer(&self, account_id: AccountId, amount: Balance) -> Result<(), Error> {
+            self.env()
+                .transfer(account_id, amount)
+                .map_err(|_| Error::TransferFailed)
         }
     }
 

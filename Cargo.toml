@@ -1,0 +1,9 @@
+[workspace]
+resolver = "2"
+members = [
+   "./d9-burn-contracts/d9-burn-common",
+   "./d9-burn-contracts/d9-burn-mining",
+   "./d9-burn-contracts/d9-main",
+   "./d9-chain-extension",
+   "./d9-merchant-mining",
+]

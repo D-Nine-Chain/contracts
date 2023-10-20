@@ -1,4 +1,6 @@
 #![cfg_attr(not(feature = "std"), no_std, no_main)]
+use std::env;
+
 use scale::{ Decode, Encode };
 pub use d9_chain_extension::D9Environment;
 type AccountId = <D9Environment as ink::env::Environment>::AccountId;

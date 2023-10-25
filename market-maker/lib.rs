@@ -1,5 +1,4 @@
 #![cfg_attr(not(feature = "std"), no_std, no_main)]
-
 pub use d9_chain_extension::D9Environment;
 #[ink::contract(env = D9Environment)]
 mod market_maker {
@@ -22,8 +21,6 @@ mod market_maker {
         fee_denominator: u32,
         /// total fees collected
         fee_total: Balance,
-        /// the invariant of the curve k = x * y
-        curve_k: Balance,
         ///represents numerator of a percent
         liquidity_tolerance_percent: u32,
         /// providers of contract liquidity
@@ -85,16 +82,18 @@ mod market_maker {
 
     impl MarketMaker {
         #[ink(constructor)]
-        pub fn new(usdt_contract: AccountId, fee_numerator: u32, fee_denominator: u32) -> Self {
-            let curve_k: Balance = (100 as Balance).saturating_mul(1_000_000_000_000);
-            let liquidity_tolerance_percent: u32 = 8;
+        pub fn new(
+            usdt_contract: AccountId,
+            fee_numerator: u32,
+            fee_denominator: u32,
+            liquidity_tolerance_percent: u32
+        ) -> Self {
             Self {
                 usdt_contract,
                 currency_balances: Default::default(),
                 fee_numerator,
                 fee_denominator,
                 fee_total: Default::default(),
-                curve_k,
                 liquidity_tolerance_percent,
                 liquidity_providers: Default::default(),
                 lp_tokens: Default::default(),
@@ -109,6 +108,10 @@ mod market_maker {
             (d9_balance, usdt_balance)
         }
 
+        #[ink(message)]
+        pub fn get_liquidity_provider(&self, account_id: AccountId) -> Option<LiquidityProvider> {
+            self.liquidity_providers.get(&account_id)
+        }
         /// add liquidity by adding tokens to the reserves
         #[ink(message, payable)]
         pub fn add_liquidity(&mut self, usdt_liquidity: Balance) -> Result<(), Error> {
@@ -169,6 +172,48 @@ mod market_maker {
             Ok(())
         }
 
+        #[ink(message)]
+        pub fn remove_liquidity(&mut self) -> Result<(), Error> {
+            let (mut d9_reserves, mut usdt_reserves) = self.get_currency_reserves();
+            let caller = self.env().caller();
+            let liquidity_provider_result = self.liquidity_providers.get(&caller);
+            let mut liquidity_provider = match liquidity_provider_result {
+                Some(liquidity_provider) => liquidity_provider,
+                None => {
+                    return Err(Error::LiquidityProviderNotFound);
+                }
+            };
+
+            // check to see if market maker can pay out
+            if self.env().balance() < liquidity_provider.d9 {
+                return Err(Error::MarketMakerHasInsufficientFunds(Currency::D9));
+            }
+            let contract_usdt_balance = self.get_usdt_balance(self.env().account_id());
+            if contract_usdt_balance < liquidity_provider.usdt {
+                return Err(Error::MarketMakerHasInsufficientFunds(Currency::USDT));
+            }
+
+            //commence disbursement of funds
+            self.env().transfer(caller, liquidity_provider.d9).expect("transfer failed");
+            let _ = self.send_usdt_to_user(caller, liquidity_provider.usdt);
+
+            //update reserves
+            d9_reserves = d9_reserves.saturating_sub(liquidity_provider.d9);
+            usdt_reserves = usdt_reserves.saturating_sub(liquidity_provider.usdt);
+            self.currency_balances.insert(Currency::D9, &d9_reserves);
+            self.currency_balances.insert(Currency::USDT, &usdt_reserves);
+
+            //burn lp
+            self.lp_tokens = self.lp_tokens.saturating_sub(liquidity_provider.lp_tokens);
+
+            //remove liquidity provider
+            self.liquidity_providers.remove(caller);
+            //burn all lp tokens
+
+            //todo payout rewrads (later)
+            //
+            Ok(())
+        }
         //   #[ink(message)]
         //   pub fn remove_liquidity(&mut self, usdt: Balance) -> Result<(), Error> {}
 
@@ -292,9 +337,14 @@ mod market_maker {
             }
             let total_usdt = self.currency_balances.get(Currency::USDT).unwrap();
 
-            let liquidity_ratio = Perbill::from_rational(usdt_liquidity as u32, total_usdt as u32);
+            // let liquidity_ratio = Perbill::from_rational(usdt_liquidity as u32, total_usdt as u32);
 
-            liquidity_ratio.mul_floor(self.lp_tokens)
+            // liquidity_ratio.mul_floor(self.lp_tokens);
+
+            let new_lp_tokens = self.lp_tokens
+                .saturating_mul(usdt_liquidity)
+                .saturating_div(total_usdt);
+            new_lp_tokens
         }
 
         /// remove lp tokens from system after liquidity is removed
@@ -334,28 +384,26 @@ mod market_maker {
             amount_0: Balance
         ) -> Result<Balance, Error> {
             //naming comes from Direction. e.g. direction.0 is the first currency in the pair
-
             // get currency balances
             let balance_0: Balance = self.currency_balances.get(direction.0).unwrap();
             let balance_1: Balance = self.currency_balances.get(direction.1).unwrap();
+            let curve_k = balance_0.saturating_mul(balance_1);
 
             // liquidity checks
             if balance_1 == 0 {
                 return Err(Error::InsufficientLiquidity(direction.1));
             }
-            if balance_0 < amount_0 {
-                return Err(Error::InsufficientLiquidity(direction.0));
-            }
 
             let new_balance_0: Balance = balance_0.saturating_add(amount_0);
 
-            let new_balance_1: Balance = self.curve_k.saturating_div(new_balance_0);
+            let new_balance_1: Balance = curve_k.saturating_div(new_balance_0);
 
             let amount_1: Balance = balance_1.saturating_sub(new_balance_1);
 
             Ok(amount_1)
         }
 
+        /// updates balances based on exchange, direction is from => to e.g. usdt => d9
         fn update_balances(&mut self, direction: Direction, amount_0: Balance, amount_1: Balance) {
             // get currency balances
             let mut balance_0: Balance = self.currency_balances.get(direction.0).unwrap();
@@ -448,6 +496,169 @@ mod market_maker {
                 )
                 .returns::<Balance>()
                 .invoke();
+            Ok(())
+        }
+    }
+    #[cfg(test)]
+    mod tests {
+        use super::*;
+
+        #[ink::test]
+        fn can_build() {
+            let default_accounts = ink::env::test::default_accounts::<ink::env::DefaultEnvironment>;
+            let usdt_contract = default_accounts().alice;
+            let mut market_maker = MarketMaker::new(usdt_contract, 4, 100, 8);
+            assert!(market_maker.usdt_contract == usdt_contract);
+        }
+
+        fn default_contract() -> MarketMaker {
+            let default_accounts = ink::env::test::default_accounts::<ink::env::DefaultEnvironment>;
+            let usdt_contract = default_accounts().alice;
+            let mut market_maker = MarketMaker::new(usdt_contract, 4, 100, 8);
+            let d9_reserve = 1_000_000_000;
+            let usdt_reserve = 10_000_000_000;
+            market_maker.currency_balances.insert(Currency::D9, &d9_reserve);
+            market_maker.currency_balances.insert(Currency::USDT, &usdt_reserve);
+            market_maker.lp_tokens = 1_000_000;
+            market_maker
+        }
+
+        #[ink::test]
+        fn new_liquidity_is_within_threshold_range() {
+            //setup contract
+            let market_maker = default_contract();
+
+            // new liquidity
+            let usdt_liquidity = 10_000_000;
+            let d9_liquidity = 1_000_000;
+
+            let result = market_maker.check_new_liquidity(d9_liquidity, usdt_liquidity);
+            assert!(result.is_ok());
+        }
+
+        #[ink::test]
+        fn new_liquidity_is_below_threshold_range() {
+            //setup contract
+            let market_maker = default_contract();
+
+            // new liquidity
+            let usdt_liquidity = 9_000_000;
+            let d9_liquidity = 1_000_000;
+
+            let result = market_maker.check_new_liquidity(d9_liquidity, usdt_liquidity);
+            assert!(result.is_err());
+        }
+
+        #[ink::test]
+        fn new_liquidity_is_above_threshold_range() {
+            //setup contract
+            let market_maker = default_contract();
+
+            // new liquidity
+            let usdt_liquidity = 3_000_000;
+            let d9_liquidity = 13_000_000;
+
+            let result = market_maker.check_new_liquidity(d9_liquidity, usdt_liquidity);
+            assert!(result.is_err());
+        }
+
+        #[ink::test]
+        fn calc_new_lp_tokens_initial_value() {
+            let mut market_maker = default_contract();
+            market_maker.lp_tokens = 0; //default is 1_000_000
+            let new_usdt_liquidity = 10_000_000;
+            let new_lp_tokens = market_maker.calc_new_lp_tokens(new_usdt_liquidity);
+            assert!(new_lp_tokens == 1_000_000);
+        }
+
+        #[ink::test]
+        fn calc_new_lp_tokens_value() {
+            let mut market_maker = default_contract();
+            let new_usdt_liquidity = 10_000_000_000;
+            let new_lp_tokens = market_maker.calc_new_lp_tokens(new_usdt_liquidity);
+            assert!(new_lp_tokens == 1_000_000);
+        }
+        #[ink::test]
+        fn calc_new_lp_tokens_value_alt() {
+            let mut market_maker = default_contract();
+            let new_usdt_liquidity = 780_000_000;
+            let new_lp_tokens = market_maker.calc_new_lp_tokens(new_usdt_liquidity);
+            println!("new lp tokens: {}", new_lp_tokens);
+            assert_eq!(new_lp_tokens, 78_000);
+        }
+
+        #[ink::test]
+        fn mint_lp_tokens() {
+            let mut market_maker = default_contract();
+            let default_accounts = ink::env::test::default_accounts::<ink::env::DefaultEnvironment>;
+            let test_account = default_accounts().alice;
+            let liquidity_provider = LiquidityProvider {
+                account_id: test_account,
+                usdt: 0,
+                d9: 0,
+                lp_tokens: 0,
+            };
+            market_maker.liquidity_providers.insert(test_account, &liquidity_provider);
+            let previous_maker_lp_tokens = market_maker.lp_tokens;
+            let added_liquidity = 10_000_000_000;
+            let calculated_lp_tokens = market_maker.calc_new_lp_tokens(added_liquidity);
+            println!("calculated lp tokens: {}", calculated_lp_tokens);
+            market_maker.mint_lp_tokens(added_liquidity, liquidity_provider);
+
+            let retrieved_provider = market_maker.get_liquidity_provider(test_account).unwrap();
+            assert_eq!(calculated_lp_tokens, retrieved_provider.lp_tokens, "incorrect lp tokens");
+            assert_eq!(
+                market_maker.lp_tokens,
+                previous_maker_lp_tokens.saturating_add(calculated_lp_tokens),
+                "tokens not saved"
+            );
+        }
+
+        #[ink::test]
+        fn calculate_exchange() {
+            let market_maker = default_contract(); // 1_000_000_000d9, 10_000_000_000usdt
+
+            let direction = Direction(Currency::USDT, Currency::D9);
+            let trade_amount: Balance = 1_000;
+
+            let exchange_amount = market_maker
+                .calculate_exchange(&direction, trade_amount)
+                .unwrap();
+            assert!(exchange_amount == 100);
+        }
+
+        #[ink::test]
+        fn update_balances() {
+            let mut market_maker = default_contract(); // 1_000_000_000d9, 10_000_000_000usdt
+
+            let direction = Direction(Currency::USDT, Currency::D9);
+            let usdt: Balance = 1000;
+            let d9: Balance = 100;
+
+            let current_usdt_balance = market_maker.currency_balances.get(Currency::USDT).unwrap();
+            let current_d9_balance = market_maker.currency_balances.get(Currency::D9).unwrap();
+            market_maker.update_balances(direction, usdt, d9);
+            let updated_usdt_balance = market_maker.currency_balances.get(Currency::USDT).unwrap();
+            let updated_d9_balance = market_maker.currency_balances.get(Currency::D9).unwrap();
+
+            assert_eq!(updated_d9_balance, current_d9_balance - d9);
+            assert_eq!(updated_usdt_balance, current_usdt_balance + usdt);
+        }
+    }
+
+    #[cfg(all(test, feature = "e2e-tests"))]
+    mod e2e_tests {
+        use super::*;
+        use ink_e2e::build_message;
+        use d9_usdt::d9_usdt::D9USDT;
+        use d9_usdt::d9_usdt::D9USDTRef;
+        type E2EResult<T> = std::result::Result<T, Box<dyn std::error::Error>>;
+
+        /// setup default contracts
+        //   async fn default_setup(mut client: ink_e2e::Client<C, E>) -> E2EResult<()> {}
+
+        #[ink_e2e::test]
+        async fn build_works(mut client: ink_e2e::Client<C, E>) -> E2EResult<()> {
             Ok(())
         }
     }

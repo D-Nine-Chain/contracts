@@ -12,21 +12,21 @@ pub mod d9_burn_mining {
     #[ink(storage)]
     pub struct D9burnMining {
         ///total amount of tokens burned so far globally
-        total_amount_burned: Balance,
+        pub total_amount_burned: Balance,
         /// the controller of this contract
         burn_manager_contract: AccountId,
         /// mapping of account ids to account data
         accounts: Mapping<AccountId, Account>,
         ///minimum permissible burn amount
-        burn_minimum: Balance,
+        pub burn_minimum: Balance,
         /// set it here to easily adjust for testing for unit, e2e tests and test network
-        day_milliseconds: Timestamp,
+        pub day_milliseconds: Timestamp,
     }
 
     impl D9burnMining {
         #[ink(constructor, payable)]
         pub fn new(burn_manager_contract: AccountId, burn_minimum: Balance) -> Self {
-            let day_milliseconds: Timestamp = 21_600_000;
+            let day_milliseconds: Timestamp = 600_000;
             Self {
                 total_amount_burned: Default::default(),
                 burn_manager_contract,
@@ -35,6 +35,7 @@ pub mod d9_burn_mining {
                 day_milliseconds,
             }
         }
+
         #[ink(message)]
         pub fn get_account(&self, account_id: AccountId) -> Option<Account> {
             self.accounts.get(&account_id)
@@ -75,7 +76,9 @@ pub mod d9_burn_mining {
 
             // Update account details
             account.amount_burned = account.amount_burned.saturating_add(amount);
-            account.last_burn = self.env().block_timestamp();
+            let new_time = self.env().block_timestamp();
+            account.last_burn = new_time.clone();
+            account.last_interaction = new_time;
             account.balance_due = account.balance_due.saturating_add(balance_due);
 
             // Insert the updated account details back into storage
@@ -107,7 +110,9 @@ pub mod d9_burn_mining {
 
             let total_withdrawal = base_extraction.saturating_add(referral_boost);
             // Update the account's details
-            account.last_withdrawal = Some(self.env().block_timestamp());
+            let new_time = self.env().block_timestamp();
+            account.last_withdrawal = Some(new_time.clone());
+            account.last_interaction = new_time;
             account.balance_due = account.balance_due.saturating_sub(total_withdrawal);
             account.balance_paid = account.balance_paid.saturating_add(total_withdrawal);
             account.referral_boost_coefficients = (0, 0);
@@ -137,19 +142,19 @@ pub mod d9_burn_mining {
         /// Factors in the time since the last withdrawal and daily return percentage.
         /// Returns the computed allowance.
         fn _calculate_base_extraction(&self, account: &Account) -> Balance {
-            let last_withdrawal = account.last_withdrawal.unwrap_or(account.creation_timestamp);
+            let last_interaction = account.last_interaction;
 
-            let days_since_last_withdraw = self
+            let days_since_last_action = self
                 .env()
                 .block_timestamp()
-                .saturating_sub(last_withdrawal)
+                .saturating_sub(last_interaction)
                 .saturating_div(self.day_milliseconds);
 
             let daily_return_percent = self._get_return_percent();
 
             let daily_allowance = daily_return_percent * account.balance_due;
             // Multiply the daily allowance by the number of days since the last withdrawal
-            let allowance = daily_allowance.saturating_mul(days_since_last_withdraw as u128); // cast needed here for arithmetic
+            let allowance = daily_allowance.saturating_mul(days_since_last_action as u128); // cast needed here for arithmetic
 
             allowance
         }

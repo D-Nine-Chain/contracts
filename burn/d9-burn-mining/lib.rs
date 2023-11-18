@@ -7,7 +7,7 @@ use d9_burn_common::{ Account, D9Environment, Error };
 pub mod d9_burn_mining {
     use super::*;
     use ink::storage::Mapping;
-    use sp_arithmetic::{ Rounding::NearestPrefDown, Perbill };
+    use sp_arithmetic::{ Rounding::NearestPrefDown, Rounding::NearestPrefUp, Perbill };
     use ink::prelude::vec::Vec;
     #[ink(storage)]
     pub struct D9burnMining {
@@ -152,7 +152,8 @@ pub mod d9_burn_mining {
 
             let daily_return_percent = self._get_return_percent();
 
-            let daily_allowance = daily_return_percent * account.balance_due;
+            // let daily_allowance = daily_return_percent * account.balance_due;
+            let daily_allowance = daily_return_percent * account.amount_burned;
             // Multiply the daily allowance by the number of days since the last withdrawal
             let allowance = daily_allowance.saturating_mul(days_since_last_action as u128); // cast needed here for arithmetic
 
@@ -193,6 +194,7 @@ pub mod d9_burn_mining {
                 self.accounts.insert(ancestor, &ancestor_account);
             }
         }
+
         fn _get_return_percent(&self) -> Perbill {
             let first_threshold_amount: Balance = 200_000_000_000_000_000_000;
             // let mut percentage: f64 = 0.008;
@@ -206,11 +208,21 @@ pub mod d9_burn_mining {
             let reductions: u128 = excess_amount
                 .saturating_div(100_000_000_000_000_000_000)
                 .saturating_add(1);
+            let divided_percent_by = reductions * 2;
+            // for _ in 0..reductions {
+            //     percentage.saturating_reciprocal_mul(Perbill::from_rational(2u32, 1u32));
+            // }
+            self.divide_perbill_by_number(percentage, divided_percent_by as u32)
+        }
 
-            for _ in 0..reductions {
-                percentage.saturating_div(Perbill::from_rational(2u128, 1u128), NearestPrefDown);
+        fn divide_perbill_by_number(&self, perbill_value: Perbill, divisor: u32) -> Perbill {
+            if divisor == 0 {
+                panic!("Division by zero is not allowed");
             }
-            percentage
+            let divided_value = perbill_value.deconstruct().saturating_div(divisor);
+
+            // Create a new Perbill instance from the divided value
+            Perbill::from_parts(divided_value)
         }
     }
 
@@ -248,7 +260,23 @@ pub mod d9_burn_mining {
             let withdrawal_allowance = d9_burn_mining._calculate_base_extraction(&account);
             assert_eq!(withdrawal_allowance, 0);
         }
-
+        #[ink::test]
+        fn get_proper_percentage() {
+            let accounts = ink::env::test::default_accounts::<ink::env::DefaultEnvironment>();
+            static BURN_MINIMUM: Balance = 100_000_000_000_000;
+            let mut d9_burn_mining = D9burnMining::new(accounts.alice, BURN_MINIMUM);
+            static INITIAL_TIME: Timestamp = 1672531200000;
+            set_block_time(INITIAL_TIME);
+            d9_burn_mining.total_amount_burned = 200_000_000_000_000_000_000;
+            let percentage = d9_burn_mining._get_return_percent();
+            assert_eq!(percentage, Perbill::from_rational(8u32, 1000u32));
+            d9_burn_mining.total_amount_burned = 250_000_000_000_000_000_000;
+            let smaller_percentage = d9_burn_mining._get_return_percent();
+            assert_eq!(smaller_percentage, Perbill::from_rational(4u32, 1000u32));
+            d9_burn_mining.total_amount_burned = 350_000_000_000_000_000_000;
+            let even_smaller_percentage = d9_burn_mining._get_return_percent();
+            assert_eq!(even_smaller_percentage, Perbill::from_rational(2u32, 1000u32));
+        }
         #[ink::test]
         fn withdrawal_permitted() {
             let accounts = ink::env::test::default_accounts::<ink::env::DefaultEnvironment>();

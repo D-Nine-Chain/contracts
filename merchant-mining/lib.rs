@@ -317,7 +317,7 @@ mod d9_merchant_mining {
             ink::env::test::set_caller::<ink::env::DefaultEnvironment>(caller);
 
             let contract_address = ink::env::account_id::<ink::env::DefaultEnvironment>();
-            ink::env::test::set_callee::<ink::env::DefaultEnvironment>(contract_address);
+            ink::env::test::set_caller::<ink::env::DefaultEnvironment>(caller);
         }
 
         /// gives everything as default setup

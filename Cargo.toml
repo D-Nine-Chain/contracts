@@ -1,9 +1,12 @@
 [workspace]
 resolver = "2"
 members = [
-   "./d9-burn-contracts/d9-burn-common",
-   "./d9-burn-contracts/d9-burn-mining",
-   "./d9-burn-contracts/d9-main",
-   "./d9-chain-extension",
-   "./d9-merchant-mining",
+   "burn/d9-burn-common",
+   "burn/d9-burn-mining",
+   "burn/d9-burn-manager",
+   "chain-extension",
+   "merchant-mining",
+   "market-maker",
+   "tokens/usdt",
+   "d9-test-utils",
 ]

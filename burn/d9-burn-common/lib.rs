@@ -74,6 +74,8 @@ pub struct Account {
     pub last_burn: Timestamp,
     /// coefficients for 0.1 and 0.01 for withdrawal calculations
     pub referral_boost_coefficients: (Balance, Balance),
+    /// burn or withdrawal resets the calculation. this is teh lasts burn/withdrawal
+    pub last_interaction: Timestamp,
 }
 
 impl Account {
@@ -84,7 +86,8 @@ impl Account {
             balance_due: 0,
             balance_paid: 0,
             last_withdrawal: None,
-            last_burn: 0,
+            last_burn: creation_timestamp,
+            last_interaction: creation_timestamp,
             referral_boost_coefficients: (0, 0),
         }
     }

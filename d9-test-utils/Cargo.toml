@@ -1,23 +1,27 @@
 [package]
-name = "d9-merchant-mining"
+name = "d9-test-utils"
 version = "0.1.0"
 authors = ["D9Dev"]
 edition = "2021"
 
-# [profile.release]
-# overflow-checks = false
-# [profile.dev]
-# overflow-checks = false
+[profile.dev]
+overflow-checks = false
+[profile.bench]
+overflow-checks = false
+[profile.release]
+overflow-checks = false
+[profile.test]
+overflow-checks = false
 
 [dependencies]
 ink = { version = "4.3.0", default-features = false }
 
-d9-chain-extension = { version = "0.1.0", path = "../d9-chain-extension", default-features = false }
+d9-chain-extension = { version = "0.1.0", path = "../chain-extension", default-features = false }
 scale = { package = "parity-scale-codec", version = "3", default-features = false, features = [
    "derive",
 ] }
 sp-arithmetic = { version = "19", default-features = false }
-scale-info = { version = "2.6", default-features = false, features = [
+scale-info = { version = "2.9", default-features = false, features = [
    "derive",
 ], optional = true }
 

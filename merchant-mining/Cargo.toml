@@ -1,19 +1,25 @@
 [package]
-name = "d9-burn-mining"
+name = "d9-merchant-mining"
 version = "0.1.0"
 authors = ["D9Dev"]
 edition = "2021"
+
 # [profile.release]
+# overflow-checks = false
+# [profile.dev]
+# overflow-checks = false
+
 [dependencies]
 ink = { version = "4.3.0", default-features = false }
-d9-burn-common = { version = "0.1.0", path = "../d9-burn-common", default-features = false }
+
+d9-chain-extension = { version = "0.1.0", path = "../chain-extension", default-features = false }
 scale = { package = "parity-scale-codec", version = "3", default-features = false, features = [
    "derive",
 ] }
-scale-info = { version = "2.9", default-features = false, features = [
+sp-arithmetic = { version = "19", default-features = false }
+scale-info = { version = "2.6", default-features = false, features = [
    "derive",
 ], optional = true }
-sp-arithmetic = { version = "19", default-features = false }
 
 [dev-dependencies]
 ink_e2e = "4.2.0"
@@ -23,12 +29,6 @@ path = "lib.rs"
 
 [features]
 default = ["std"]
-std = [
-   "ink/std",
-   "scale/std",
-   "scale-info/std",
-   "d9-burn-common/std",
-   "sp-arithmetic/std",
-]
+std = ["ink/std", "scale/std", "scale-info/std", "d9-chain-extension/std"]
 ink-as-dependency = []
 e2e-tests = []

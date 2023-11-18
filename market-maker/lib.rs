@@ -88,6 +88,10 @@ mod market_maker {
             fee_denominator: u32,
             liquidity_tolerance_percent: u32
         ) -> Self {
+            assert!(
+                0 < liquidity_tolerance_percent && liquidity_tolerance_percent <= 100,
+                "tolerance must be 0 < x <= 100"
+            );
             Self {
                 usdt_contract,
                 currency_balances: Default::default(),
@@ -131,10 +135,6 @@ mod market_maker {
                 }
             };
 
-            // get reserves
-            let mut usdt_reserves = self.currency_balances.get(Currency::USDT).unwrap_or(0);
-            let mut d9_reserves = self.currency_balances.get(Currency::D9).unwrap_or(0);
-
             let d9_liquidity = self.env().transferred_value();
 
             // greeater than zero checks
@@ -142,6 +142,7 @@ mod market_maker {
                 return Err(Error::InsufficientLiquidityProvided);
             }
 
+            let (mut d9_reserves, mut usdt_reserves) = self.get_currency_reserves();
             if usdt_reserves != 0 && d9_reserves != 0 {
                 let liquidity_check = self.check_new_liquidity(d9_liquidity, usdt_liquidity);
                 if liquidity_check.is_err() {
@@ -167,12 +168,6 @@ mod market_maker {
             if receive_usdt_result.is_err() {
                 return Err(receive_usdt_result.unwrap_err());
             }
-
-            usdt_reserves = usdt_reserves.saturating_add(usdt_liquidity);
-            d9_reserves = d9_reserves.saturating_add(d9_liquidity);
-
-            self.currency_balances.insert(Currency::USDT, &usdt_reserves);
-            self.currency_balances.insert(Currency::D9, &d9_reserves);
 
             // Calculate liquidity token amount to mint.
             self.mint_lp_tokens(usdt_liquidity.clone(), d9_liquidity, liquidity_provider.clone());
@@ -235,23 +230,23 @@ mod market_maker {
             let (d9_reserves, usdt_reserves) = self.get_currency_reserves();
 
             // Compute the ideal amount of d9_liquidity for the given usdt_liquidity using Perbill for precision
-            let price_ratio = Perbill::from_rational(d9_reserves, usdt_reserves);
-            let ideal_d9_for_provided_usdt = price_ratio.mul_floor(usdt_liquidity);
+            let price_ratio = Perbill::from_rational(usdt_reserves, d9_reserves);
+            let ideal_usdt_for_provided_d9 = price_ratio.mul_floor(d9_liquidity);
 
             // Determine the deviation allowed in absolute terms using Perbill
             let allowed_deviation_fraction = Perbill::from_percent(
                 self.liquidity_tolerance_percent
             );
             let allowed_deviation_amount = allowed_deviation_fraction.mul_floor(
-                ideal_d9_for_provided_usdt
+                ideal_usdt_for_provided_d9
             );
 
             // Calculate bounds for d9_liquidity using saturating arithmetic
-            let min_d9 = ideal_d9_for_provided_usdt.saturating_sub(allowed_deviation_amount);
-            let max_d9 = ideal_d9_for_provided_usdt.saturating_add(allowed_deviation_amount);
+            let min_usdt = ideal_usdt_for_provided_d9.saturating_sub(allowed_deviation_amount);
+            let max_usdt = ideal_usdt_for_provided_d9.saturating_add(allowed_deviation_amount);
 
             // Check if the provided d9_liquidity is within bounds
-            if d9_liquidity >= min_d9 && d9_liquidity <= max_d9 {
+            if usdt_liquidity >= min_usdt && usdt_liquidity <= max_usdt {
                 Ok(())
             } else {
                 Err(Error::InsufficientLiquidityProvided)
@@ -329,9 +324,14 @@ mod market_maker {
             mut liquidity_provider: LiquidityProvider
         ) {
             let new_lp_tokens = self.calc_new_lp_tokens(new_d9_liquidity, new_usdt_liquidity);
+            //add tokens to lp provider and contract total
             self.lp_tokens = self.lp_tokens.saturating_add(new_lp_tokens);
             liquidity_provider.lp_tokens =
                 liquidity_provider.lp_tokens.saturating_add(new_lp_tokens);
+
+            liquidity_provider.d9 = liquidity_provider.d9.saturating_add(new_d9_liquidity);
+            liquidity_provider.usdt = liquidity_provider.usdt.saturating_add(new_usdt_liquidity);
+
             self.liquidity_providers.insert(liquidity_provider.account_id, &liquidity_provider);
         }
 

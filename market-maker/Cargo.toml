@@ -24,6 +24,11 @@ sp-arithmetic = { version = "19", default-features = false }
 scale-info = { version = "2.9", default-features = false, features = [
    "derive",
 ], optional = true }
+substrate-fixed = { default-features = false, git = "https://github.com/encointer/substrate-fixed" }
+# [dependencies.fixed]
+# default-features = false
+# git = "https://github.com/encointer/substrate-fixed"
+# package = "substrate-fixed"
 
 [dev-dependencies]
 ink_e2e = "4.2.0"

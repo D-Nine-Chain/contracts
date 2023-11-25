@@ -1,22 +1,27 @@
 [package]
-name = "d9-chain-extension"
+name = "mining_pool"
 version = "0.1.0"
-authors = ["D9Devs"]
+authors = ["D9"]
 edition = "2021"
 
 [dependencies]
 ink = { version = "4.3.0", default-features = false }
-ink_env = { version = "4.3.0", default-features = false }
+sp-arithmetic = { version = "19", default-features = false }
 scale = { package = "parity-scale-codec", version = "3", default-features = false, features = [
    "derive",
 ] }
+scale-info = { version = "2.6", default-features = false, features = [
+   "derive",
+], optional = true }
 
-scale-info = { version = "2.10.0", default-features = false }
+[dev-dependencies]
+ink_e2e = "4.2.0"
 
 [lib]
 path = "lib.rs"
 
 [features]
 default = ["std"]
-std = ["ink/std", "scale/std", "scale-info/std", "ink_env/std"]
+std = ["ink/std", "scale/std", "scale-info/std"]
 ink-as-dependency = []
+e2e-tests = []

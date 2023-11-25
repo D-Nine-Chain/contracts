@@ -9,4 +9,7 @@ members = [
    "market-maker",
    "tokens/usdt",
    "d9-test-utils",
+   "mining-pool",
+   "node-reward",
+
 ]

@@ -1,20 +1,18 @@
 #![cfg_attr(not(feature = "std"), no_std, no_main)]
 pub use d9_chain_extension::D9Environment;
-#[ink::contract()]
+#[ink::contract(env = D9Environment)]
 mod market_maker {
     use super::*;
     use scale::{ Decode, Encode };
     use ink::storage::Mapping;
-    use sp_arithmetic::Perbill;
     use ink::selector_bytes;
     use ink::env::call::{ build_call, ExecutionInput, Selector };
-
+    use substrate_fixed::{ FixedU128, types::extra::U6 };
+    type FixedBalance = FixedU128<U6>;
     #[ink(storage)]
     pub struct MarketMaker {
         /// contract for usdt coin
         usdt_contract: AccountId,
-        /// pool balances
-        currency_balances: Mapping<Currency, Balance>,
         /// Perbill::from_rational(fee_numerator, fee_denominator)
         fee_numerator: u32,
         /// Perbill::from_rational(fee_numerator, fee_denominator)
@@ -78,6 +76,8 @@ mod market_maker {
         InsufficientLPTokens,
         InsufficientContractLPTokens,
         DivisionByZero,
+        USDTTooSmall,
+        USDTTooMuch,
     }
 
     impl MarketMaker {
@@ -94,7 +94,6 @@ mod market_maker {
             );
             Self {
                 usdt_contract,
-                currency_balances: Default::default(),
                 fee_numerator,
                 fee_denominator,
                 fee_total: Default::default(),
@@ -122,7 +121,7 @@ mod market_maker {
             //get liquidity provider info
             let caller = self.env().caller();
             let liquidity_provider_result = self.liquidity_providers.get(&caller);
-            let liquidity_provider = match liquidity_provider_result {
+            let liquidity_provider: LiquidityProvider = match liquidity_provider_result {
                 Some(liquidity_provider) => liquidity_provider,
                 None => {
                     let liquidity_provider = LiquidityProvider {
@@ -143,12 +142,12 @@ mod market_maker {
             }
 
             let (mut d9_reserves, mut usdt_reserves) = self.get_currency_reserves();
-            if usdt_reserves != 0 && d9_reserves != 0 {
-                let liquidity_check = self.check_new_liquidity(d9_liquidity, usdt_liquidity);
-                if liquidity_check.is_err() {
-                    return Err(liquidity_check.unwrap_err());
-                }
-            }
+            // if usdt_reserves != 0 && d9_reserves != 0 {
+            //     let liquidity_check = self.check_new_liquidity(d9_liquidity, usdt_liquidity);
+            //     if liquidity_check.is_err() {
+            //         return Err(liquidity_check.unwrap_err());
+            //     }
+            // }
             // make sure new liquidity doesn't deviate price more than tolerance
 
             // does sender have sufficient usdt
@@ -169,57 +168,47 @@ mod market_maker {
                 return Err(receive_usdt_result.unwrap_err());
             }
 
-            // Calculate liquidity token amount to mint.
-            self.mint_lp_tokens(usdt_liquidity.clone(), d9_liquidity, liquidity_provider.clone());
+            // self.mint_lp_tokens(d9_liquidity, usdt_liquidity.clone(), liquidity_provider.clone());
 
             Ok(())
         }
 
         #[ink(message)]
         pub fn remove_liquidity(&mut self) -> Result<(), Error> {
-            let (mut d9_reserves, mut usdt_reserves) = self.get_currency_reserves();
             let caller = self.env().caller();
-            let liquidity_provider_result = self.liquidity_providers.get(&caller);
-            let liquidity_provider = match liquidity_provider_result {
-                Some(liquidity_provider) => liquidity_provider,
-                None => {
-                    return Err(Error::LiquidityProviderNotFound);
-                }
-            };
+            let (mut d9_reserves, mut usdt_reserves) = self.get_reserves();
 
-            // check to see if market maker can pay out
-            if self.env().balance() < liquidity_provider.d9 {
-                return Err(Error::MarketMakerHasInsufficientFunds(Currency::D9));
+            let liquidity_provider = self.liquidity_providers.get(&caller);
+            if liquidity_provider.is_none() {
+                return Err(Error::LiquidityProviderNotFound);
             }
-            let contract_usdt_balance = self.get_usdt_balance(self.env().account_id());
-            if contract_usdt_balance < liquidity_provider.usdt {
-                return Err(Error::MarketMakerHasInsufficientFunds(Currency::USDT));
-            }
+            // Calculate percentage contributed
+            let d9_percent = liquidity_provider.d9 / d9_reserves;
+            let usdt_percent = liquidity_provider.usdt / usdt_reserves;
 
-            //commence disbursement of funds
-            self.env().transfer(caller, liquidity_provider.d9).expect("transfer failed");
-            let _ = self.send_usdt_to_user(caller, liquidity_provider.usdt);
+            // Pay out respective percentages of current reserves
+            let d9_payout = d9_reserves * d9_percent;
+            let usdt_payout = usdt_reserves * usdt_percent;
 
-            //update reserves
-            d9_reserves = d9_reserves.saturating_sub(liquidity_provider.d9);
-            usdt_reserves = usdt_reserves.saturating_sub(liquidity_provider.usdt);
-            self.currency_balances.insert(Currency::D9, &d9_reserves);
-            self.currency_balances.insert(Currency::USDT, &usdt_reserves);
+            d9_reserves -= d9_payout;
+            usdt_reserves -= usdt_payout;
 
-            //burn lp
-            self.lp_tokens = self.lp_tokens.saturating_sub(liquidity_provider.lp_tokens);
+            // Transfer payouts
+            self.env().transfer(caller, d9_payout)?;
+            self.send_usdt(caller, usdt_payout)?;
 
-            //remove liquidity provider
-            self.liquidity_providers.remove(caller);
-            //burn all lp tokens
+            // Remove liquidity
+            self.lp_tokens -= liquidity_provider.lp_tokens;
+            self.liquidity_providers.remove(&caller);
 
-            //todo payout rewrads (later)
-            //
             Ok(())
         }
         //   #[ink(message)]
         //   pub fn remove_liquidity(&mut self, usdt: Balance) -> Result<(), Error> {}
 
+        fn conform_d9_to_u32(d9: Balance) -> u32 {
+            d9.saturating_div(1_000_000_000_000) as u32
+        }
         /// ensure added liquidity will not deviate price more than tolerance
         #[ink(message)]
         pub fn check_new_liquidity(
@@ -228,31 +217,38 @@ mod market_maker {
             usdt_liquidity: Balance
         ) -> Result<(), Error> {
             let (d9_reserves, usdt_reserves) = self.get_currency_reserves();
-
-            // Compute the ideal amount of d9_liquidity for the given usdt_liquidity using Perbill for precision
-            let price_ratio = Perbill::from_rational(usdt_reserves, d9_reserves);
-            let ideal_usdt_for_provided_d9 = price_ratio.mul_floor(d9_liquidity);
-
-            // Determine the deviation allowed in absolute terms using Perbill
-            let allowed_deviation_fraction = Perbill::from_percent(
-                self.liquidity_tolerance_percent
-            );
-            let allowed_deviation_amount = allowed_deviation_fraction.mul_floor(
-                ideal_usdt_for_provided_d9
-            );
-
-            // Calculate bounds for d9_liquidity using saturating arithmetic
-            let min_usdt = ideal_usdt_for_provided_d9.saturating_sub(allowed_deviation_amount);
-            let max_usdt = ideal_usdt_for_provided_d9.saturating_add(allowed_deviation_amount);
-
-            // Check if the provided d9_liquidity is within bounds
-            if usdt_liquidity >= min_usdt && usdt_liquidity <= max_usdt {
-                Ok(())
-            } else {
-                Err(Error::InsufficientLiquidityProvided)
+            let usdt_per_d9_calc: Option<FixedBalance> = FixedBalance::from_num(
+                usdt_reserves
+            ).checked_div(FixedBalance::from_num(d9_reserves));
+            if usdt_per_d9_calc.is_none() {
+                return Err(Error::DivisionByZero);
             }
-        }
+            let usdt_per_d9 = usdt_per_d9_calc.unwrap();
+            let ideal_usdt_liquidity = usdt_per_d9.saturating_mul_int(d9_liquidity);
+            // let allowed_deviation_fraction = Perbill::from_percent(
+            //     self.liquidity_tolerance_percent
+            // );
+            let allowed_deviation_fraction = FixedBalance::from_num(
+                self.liquidity_tolerance_percent
+            )
+                .checked_div(FixedBalance::from_num(100))
+                .unwrap();
+            let allowed_deviation_amount =
+                allowed_deviation_fraction.saturating_mul(ideal_usdt_liquidity);
+            // // Calculate bounds for d9_liquidity using saturating arithmetic
+            let min_usdt = ideal_usdt_liquidity.saturating_sub(allowed_deviation_amount);
+            let max_usdt = ideal_usdt_liquidity.saturating_add(allowed_deviation_amount);
 
+            // // Check if the provided d9_liquidity is within bounds
+            if usdt_liquidity < min_usdt {
+                return Err(Error::USDTTooSmall);
+            }
+            if max_usdt < usdt_liquidity {
+                return Err(Error::USDTTooMuch);
+            }
+            Ok(())
+        }
+        //   fn calculate_price(&self, amount: Balance) -> Balance {}
         /// sell usdt
         #[ink(message)]
         pub fn get_d9(&mut self, usdt: Balance) -> Result<(Currency, Balance), Error> {
@@ -345,16 +341,21 @@ mod market_maker {
             if self.lp_tokens == 0 {
                 return 1_000_000;
             }
-            let total_usdt = self.currency_balances.get(Currency::USDT).unwrap();
-            let total_d9 = self.currency_balances.get(Currency::D9).unwrap();
-            let total_sum = total_d9.saturating_add(total_usdt);
-            if total_sum == 0 {
+            let (d9_reserve, usdt_reserve) = self.get_currency_reserves();
+            let current_reserve_total = d9_reserve.saturating_add(usdt_reserve);
+            if current_reserve_total == 0 {
                 return 1_000_000;
             }
-            let new_lp_tokens = self.lp_tokens
-                .saturating_mul(usdt_liquidity.saturating_add(d9_liquidity))
-                .saturating_div(total_sum);
-            new_lp_tokens
+            let new_liquidity_total = d9_liquidity.saturating_add(usdt_liquidity);
+            let percent_of_pool_calc: Option<FixedBalance> = FixedBalance::from_num(
+                new_liquidity_total
+            ).checked_div(FixedBalance::from_num(current_reserve_total + new_liquidity_total));
+            if percent_of_pool_calc.is_none() {
+                return 1_000_000;
+            }
+            let percent_of_pool = percent_of_pool_calc.unwrap();
+            let new_lp_tokens = percent_of_pool.saturating_mul_int(self.lp_tokens);
+            new_lp_tokens.to_num::<Balance>()
         }
 
         /// amount of currency B from A, if A => B
@@ -382,6 +383,7 @@ mod market_maker {
 
             Ok(amount_1)
         }
+
         fn get_currency_balance(&self, currency: Currency) -> Balance {
             match currency {
                 Currency::D9 => self.env().balance(),
@@ -389,14 +391,13 @@ mod market_maker {
             }
         }
         /// get exchange fee
-        fn calculate_fee(&self, amount: Balance) -> Result<Balance, Error> {
-            let percent: Perbill = Perbill::from_rational(self.fee_numerator, self.fee_denominator);
-            let fee: Balance = percent.mul_ceil(amount);
-            if fee == 0 {
-                return Err(Error::ConversionAmountTooLow);
-            }
-            Ok(fee)
-        }
+        //   fn calculate_fee(&self, amount: Balance) -> Result<Balance, Error> {
+        //       let fee: Balance = percent.mul_ceil(amount);
+        //       if fee == 0 {
+        //           return Err(Error::ConversionAmountTooLow);
+        //       }
+        //       Ok(fee)
+        //   }
 
         /// check if usdt balance is sufficient for swap
         #[ink(message)]
@@ -486,6 +487,7 @@ mod market_maker {
     mod tests {
         use super::*;
         use ink::env::test::default_accounts;
+
         #[ink::test]
         fn can_build() {
             let default_accounts = ink::env::test::default_accounts::<ink::env::DefaultEnvironment>;
@@ -565,7 +567,6 @@ mod market_maker {
             let new_usdt_liquidity = 780_000;
             let new_d9_tokens = 1_000_000;
             let new_lp_tokens = market_maker.calc_new_lp_tokens(new_usdt_liquidity, new_d9_tokens);
-            println!("new lp tokens: {}", new_lp_tokens);
             assert_eq!(new_lp_tokens, 890);
         }
 
@@ -609,8 +610,34 @@ mod market_maker {
         use d9_usdt::d9_usdt::D9USDTRef;
         //   use openbrush::contracts::psp22::psp22_external::PSP22;
         type E2EResult<T> = std::result::Result<T, Box<dyn std::error::Error>>;
-        //   async fn default_setup(mut client: ink_e2e::Client<C, E>) -> E2EResult<()> {}
 
+        #[ink_e2e::test]
+        async fn check_liquidity(mut client: ink_e2e::Client<C, E>) -> E2EResult<()> {
+            let initial_supply: Balance = 100_000_000_000_000;
+            let d9_liquidity: Balance = 10_000_000000000000;
+            let usdt_liquidity: Balance = 10_000_00;
+            let usdt_constructor = D9USDTRef::new(initial_supply);
+            let usdt_address = client
+                .instantiate("d9_usdt", &ink_e2e::alice(), usdt_constructor, 0, None).await
+                .expect("failed to instantiate usdt").account_id;
+
+            // init market maker
+            let amm_constructor = MarketMakerRef::new(usdt_address, 1, 100, 10);
+            let amm_address = client
+                .instantiate("market_maker", &ink_e2e::alice(), amm_constructor, 0, None).await
+                .expect("failed to instantiate market maker").account_id;
+
+            //build approval message
+            let caller = account_id(AccountKeyring::Alice);
+            let check_liquidity_message = build_message::<MarketMakerRef>(amm_address.clone()).call(
+                |market_maker| market_maker.check_new_liquidity(d9_liquidity, usdt_liquidity)
+            );
+
+            let response = client.call(&ink_e2e::alice(), check_liquidity_message, 0, None).await;
+            // execute approval call
+            assert!(response.is_ok());
+            Ok(())
+        }
         #[ink_e2e::test]
         async fn check_usdt_balance(mut client: ink_e2e::Client<C, E>) -> E2EResult<()> {
             let initial_supply: Balance = 100_000_000_000_000;

@@ -1,6 +1,7 @@
 #![cfg_attr(not(feature = "std"), no_std, no_main)]
 
 pub use d9_chain_extension::D9Environment;
+
 #[ink::contract(env = D9Environment)]
 mod d9_merchant_mining {
     use super::*;
@@ -8,6 +9,9 @@ mod d9_merchant_mining {
     use ink::storage::Mapping;
     use sp_arithmetic::Perbill;
     use ink::prelude::vec::Vec;
+    use ink::env::call::{ build_call, ExecutionInput, Selector };
+    use ink::selector_bytes;
+
     #[derive(Decode, Encode)]
     #[cfg_attr(
         feature = "std",
@@ -16,6 +20,8 @@ mod d9_merchant_mining {
     pub struct Account {
         //green points => red points  Δ =  0.005 % / day
         green_points: Balance,
+        // number (n,m) of sons and grandson respectively
+        relationship_factors: (Balance, Balance),
         //timestamp of last conversion to d9 or usdt
         last_conversion: Option<Timestamp>,
         //red points => usdt
@@ -26,24 +32,78 @@ mod d9_merchant_mining {
         created_at: Timestamp,
     }
 
+    impl Account {
+        fn new(created_at: Timestamp) -> Self {
+            Self {
+                green_points: Balance::default(),
+                relationship_factors: (0, 0),
+                last_conversion: None,
+                redeemed_usdt: Balance::default(),
+                redeemed_d9: Balance::default(),
+                created_at,
+            }
+        }
+    }
+
+    // data to return to user
+    #[derive(Decode, Encode)]
+    #[cfg_attr(
+        feature = "std",
+        derive(Debug, PartialEq, Eq, ink::storage::traits::StorageLayout, scale_info::TypeInfo)
+    )]
+    pub struct GreenPointsResult {
+        merchant: Balance,
+        consumer: Balance,
+    }
+
+    #[derive(Encode, Decode, Debug, PartialEq, Eq, Copy, Clone)]
+    #[cfg_attr(feature = "std", derive(scale_info::TypeInfo))]
+    pub enum Currency {
+        D9,
+        USDT,
+    }
+
     #[derive(Encode, Decode, Debug, PartialEq, Eq, Copy, Clone)]
     #[cfg_attr(feature = "std", derive(scale_info::TypeInfo))]
     pub enum Error {
         InsufficientPayment,
+        InsufficientAllowance,
         NoMerchantAccountFound,
         MerchantAccountExpired,
         NoAccountFound,
         NothingToRedeem,
         ErrorTransferringToMainContract,
-        TransferFailed,
+        ErrorTransferringToUSDTToMerchant,
+        UserUSDTBalanceInsufficient,
+        D9TransferFailed,
+        USDTTransferFailed,
+        OnlyAdmin,
+        GrantingAllowanceFailed,
+        AMMConversionFailed,
     }
 
     #[ink(event)]
-    pub struct Subscription {
+    pub struct SubscriptionCreated {
         #[ink(topic)]
         account_id: AccountId,
         #[ink(topic)]
         expiry: Timestamp,
+    }
+
+    // event for creation of green points
+    #[ink(event)]
+    pub struct GreenPointsTransaction {
+        #[ink(topic)]
+        merchant: GreenPointsCreated,
+        #[ink(topic)]
+        consumer: GreenPointsCreated,
+    }
+    // a struct associated with the GreenPointsTransaction event
+    #[derive(Encode, Decode, Debug, PartialEq, Eq, Copy, Clone)]
+    #[cfg_attr(feature = "std", derive(scale_info::TypeInfo))]
+    pub struct GreenPointsCreated {
+        account_id: AccountId,
+        green_points: Balance,
     }
 
     #[ink(storage)]
@@ -53,188 +113,60 @@ mod d9_merchant_mining {
         merchant_expiry: Mapping<AccountId, Timestamp>,
         accounts: Mapping<AccountId, Account>,
         subscription_fee: Balance,
-        main_contract: AccountId,
+        usdt_contract: AccountId,
+        amm_contract: AccountId,
+        mining_pool: AccountId,
         milliseconds_day: Timestamp,
+        admin: AccountId,
     }
 
     impl D9MerchantMining {
         /// Constructor that initializes the `bool` value to the given `init_value`.
         #[ink(constructor)]
-        pub fn new(subscription_fee: Balance, main_contract: AccountId) -> Self {
-            if subscription_fee == 0 {
-                panic!("subscription fee cannot be zero");
-            }
+        pub fn new(
+            amm_contract: AccountId,
+            mining_pool: AccountId,
+            usdt_contract: AccountId
+        ) -> Self {
             Self {
-                main_contract,
+                admin: Self::env().caller(),
+                amm_contract,
+                usdt_contract,
+                mining_pool,
                 merchant_expiry: Default::default(),
                 accounts: Default::default(),
-                subscription_fee,
-                milliseconds_day: 86_400_000,
+                subscription_fee: 1000,
+                milliseconds_day: 600_000,
             }
         }
 
         /// create merchant account subscription
-        #[ink(message, payable)]
-        pub fn d9_subscribe(&mut self) -> Result<Timestamp, Error> {
-            let amount_in_base = self.env().transferred_value();
-            let account_id = self.env().caller();
-            let update_expiry_result = self.update_subscription(account_id, amount_in_base);
+        #[ink(message)]
+        pub fn subscribe(&mut self, usdt_amount: Balance) -> Result<Timestamp, Error> {
+            let merchant_id = self.env().caller();
+            if usdt_amount < self.subscription_fee {
+                return Err(Error::InsufficientPayment);
+            }
+            let validate_transfer = self.validate_usdt_transfer(merchant_id, usdt_amount);
+            if let Err(e) = validate_transfer {
+                return Err(e);
+            }
+            let receive_usdt_result = self.receive_usdt_from_user(merchant_id, usdt_amount);
+            if let Err(e) = receive_usdt_result {
+                return Err(e);
+            }
+
+            let update_expiry_result = self.update_subscription(merchant_id, usdt_amount);
             update_expiry_result
         }
 
-        /// pay green points to `account_id` using d9
-        #[ink(message, payable)]
-        pub fn give_green_points(
-            &mut self,
-            account_id: AccountId
-        ) -> Result<(AccountId, Balance), Error> {
-            //check if valid merchant subscription
-            let caller: AccountId = self.env().caller();
-            let d9_to_convert: Balance = self.env().transferred_value();
-            // let d9_to_convert = 10000;
-            let merchant_expiry_option: Option<Timestamp> = self.merchant_expiry.get(&caller);
-            match merchant_expiry_option {
-                Some(expiry) => {
-                    if expiry < self.env().block_timestamp() {
-                        return Err(Error::MerchantAccountExpired);
-                    }
-                }
-                None => {
-                    return Err(Error::NoMerchantAccountFound);
-                }
-            }
-
-            //convert to green points
-            if d9_to_convert == 0 {
-                return Err(Error::InsufficientPayment);
-            }
-            let maybe_account: Option<Account> = self.accounts.get(&account_id);
-            let mut account: Account = match maybe_account {
-                Some(account) => account,
-                None =>
-                    Account {
-                        green_points: 0,
-                        last_conversion: None,
-                        redeemed_usdt: 0,
-                        redeemed_d9: 0,
-                        created_at: self.env().block_timestamp(),
-                    },
-            };
-
-            account.green_points = account.green_points.saturating_add(
-                d9_to_convert.saturating_mul(100)
-            );
-            self.accounts.insert(account_id, &account);
-            // let transfer_result = self.env().transfer(self.main_contract, amount);
-            // if transfer_result.is_err() {
-            //     return Err(Error::ErrorTransferringToMainContract);
-            // }
-            Ok((account_id, account.green_points))
-        }
-
-        ///withdraw a certain amount of d9 that has been converted into red points
-        #[ink(message)]
-        pub fn redeem_d9(&mut self) -> Result<Balance, Error> {
-            //get account
-            let caller = self.env().caller();
-            let maybe_account = self.accounts.get(&caller);
-            if maybe_account.is_none() {
-                return Err(Error::NoAccountFound);
-            }
-            let mut account = maybe_account.unwrap();
-
-            //caculate green => red points conversion
-            let last_redeem_timestamp = account.last_conversion.unwrap_or(account.created_at);
-            let red_points = self.calculate_red_points(account.green_points, last_redeem_timestamp);
-            if red_points == 0 {
-                return Err(Error::NothingToRedeem);
-            }
-
-            //calculated red points => d9 conversion
-            // let redeemable_d9 = red_points.saturating_div(100);
-            let redeemable_d9 = red_points;
-
-            //attempt to pay ancestors
-            if let Some(ancestors) = self.get_ancestors(caller) {
-                let remainder = self.pay_ancestors(redeemable_d9, &ancestors)?;
-                account.green_points = account.green_points.saturating_sub(red_points);
-                account.redeemed_d9 = account.redeemed_d9.saturating_add(redeemable_d9);
-                account.last_conversion = Some(self.env().block_timestamp());
-                self.accounts.insert(caller, &account);
-                self.env()
-                    .transfer(self.env().caller(), remainder.clone())
-                    .expect("Transfer failed");
-                return Ok(remainder.clone());
-            }
-
-            //update account
-            account.green_points = account.green_points.saturating_sub(red_points);
-            account.redeemed_d9 = account.redeemed_d9.saturating_add(redeemable_d9);
-            account.last_conversion = Some(self.env().block_timestamp());
-            self.env()
-                .transfer(self.env().caller(), redeemable_d9.clone())
-                .expect("Transfer failed");
-            self.accounts.insert(caller, &account);
-
-            Ok(redeemable_d9)
-        }
-
-        #[ink(message)]
-        pub fn get_expiry(&self, account_id: AccountId) -> Result<Timestamp, Error> {
-            let expiry = self.merchant_expiry.get(&account_id);
-            match expiry {
-                Some(expiry) => Ok(expiry),
-                None => Err(Error::NoMerchantAccountFound),
-            }
-        }
-
-        #[ink(message)]
-        /// get account details
-        pub fn get_account(&self, account_id: AccountId) -> Result<Account, Error> {
-            let maybe_account = self.accounts.get(&account_id);
-            if maybe_account.is_none() {
-                return Err(Error::NoAccountFound);
-            }
-            let account = maybe_account.unwrap();
-            Ok(account)
-        }
-
-        /// redpoints are calculated at the time of withdraw request
-        ///
-        /// 1 red point = 1 green point
-        fn calculate_red_points(
-            &self,
-            green_points: Balance,
-            last_redeem_timestamp: Timestamp
-        ) -> Balance {
-            // rate green points => red points
-            let transmutation_rate = Perbill::from_rational(1u32, 20000u32);
-
-            let days_since_last_redeem = self
-                .env()
-                .block_timestamp()
-                .saturating_sub(last_redeem_timestamp)
-                .saturating_div(self.milliseconds_day) as Balance;
-
-            let red_points = transmutation_rate
-                .mul_ceil(green_points)
-                .saturating_mul(days_since_last_redeem);
-
-            if red_points > green_points {
-                return green_points;
-            } else if days_since_last_redeem > 10 && red_points == 0 && green_points > 0 {
-                return green_points;
-            } else {
-                return red_points;
-            }
-        }
         ///create/update subscription, returns new expiry `Timestamp` Result
         fn update_subscription(
             &mut self,
             account_id: AccountId,
-            amount_in_base: Balance
+            amount: Balance
         ) -> Result<Timestamp, Error> {
-            let months = amount_in_base.saturating_div(self.subscription_fee) as Timestamp;
+            let months = amount.saturating_div(self.subscription_fee) as Timestamp;
             if months == 0 {
                 return Err(Error::InsufficientPayment);
             }
@@ -251,11 +183,530 @@ mod d9_merchant_mining {
             };
             let new_expiry = current_expiry.saturating_add(months.saturating_mul(one_month));
             self.merchant_expiry.insert(account_id.clone(), &new_expiry);
-            self.env().emit_event(Subscription {
+            self.env().emit_event(SubscriptionCreated {
                 account_id,
                 expiry: new_expiry,
             });
             Ok(new_expiry)
+        }
+
+        ///withdraw a certain amount of d9 that has been converted into red points
+        #[ink(message)]
+        pub fn redeem_usdt(&mut self) -> Result<Balance, Error> {
+            //get account
+            let caller = self.env().caller();
+            let maybe_account = self.accounts.get(&caller);
+            if maybe_account.is_none() {
+                return Err(Error::NoAccountFound);
+            }
+            let mut account = maybe_account.unwrap();
+            if account.green_points == 0 {
+                return Err(Error::NothingToRedeem);
+            }
+            //caculate green => red points conversion
+            let last_redeem_timestamp = account.last_conversion.unwrap_or(account.created_at);
+
+            let time_based_red_points = self.calculate_red_points_from_time(
+                account.green_points,
+                last_redeem_timestamp
+            );
+            let relationship_based_red_points = self.calculate_red_points_from_relationships(
+                account.green_points,
+                account.relationship_factors
+            );
+
+            let total_red_points = time_based_red_points.saturating_add(
+                relationship_based_red_points
+            );
+            if total_red_points == 0 {
+                return Err(Error::NothingToRedeem);
+            }
+            let convertible_red_points = {
+                if total_red_points > account.green_points {
+                    account.green_points
+                } else {
+                    total_red_points
+                }
+            };
+            // deduct red points from green points
+            account.green_points = account.green_points.saturating_sub(convertible_red_points);
+
+            //calculated red points => d9 conversion
+            // let redeemable_d9 = red_points.saturating_div(100);
+            let redeemable_usdt = convertible_red_points.saturating_div(100);
+
+            //update account
+            account.redeemed_usdt = account.redeemed_usdt.saturating_add(redeemable_usdt);
+            account.last_conversion = Some(self.env().block_timestamp());
+            let usdt_transfer = self.send_usdt(caller, redeemable_usdt);
+            if let Err(e) = usdt_transfer {
+                return Err(e);
+            }
+
+            self.accounts.insert(caller, &account);
+            //attempt to pay ancestors
+            if let Some(ancestors) = self.get_ancestors(caller) {
+                let result = self.update_ancestors_coefficients(&ancestors);
+                if result.is_err() {
+                    return Err(Error::NoAccountFound);
+                }
+            }
+
+            Ok(redeemable_usdt)
+        }
+
+        pub fn send_tokens_to_amm(&mut self) -> Result<(), Error> {
+            let amount = self.env().transferred_value();
+            let transfer_result = self.env().transfer(self.amm_contract, amount);
+            if transfer_result.is_err() {
+                return Err(Error::ErrorTransferringToMainContract);
+            }
+            Ok(())
+        }
+
+        pub fn send_usdt_to_amm(self, usdt_amount: Balance) -> Result<(), Error> {
+            self.send_usdt(self.amm_contract, usdt_amount)
+        }
+
+        #[ink(message)]
+        pub fn give_green_points_usdt(
+            &mut self,
+            consumer_id: AccountId,
+            usdt_amount: Balance
+        ) -> Result<GreenPointsResult, Error> {
+            let merchant_id: AccountId = self.env().caller();
+            let validate_merchant = self.validate_merchant(merchant_id);
+            if let Err(e) = validate_merchant {
+                return Err(e);
+            }
+            let check_usdt = self.validate_usdt_transfer(merchant_id, usdt_amount);
+            if let Err(e) = check_usdt {
+                return Err(e);
+            }
+            let receive_usdt_result = self.receive_usdt_from_user(merchant_id, usdt_amount);
+            if let Err(e) = receive_usdt_result {
+                return Err(e);
+            }
+
+            // calculate green points
+            let consumer_green_points = self.calculate_green_points(usdt_amount);
+            let sixteen_percent = Perbill::from_rational(16u32, 100u32);
+            let merchant_green_points = sixteen_percent.mul_floor(usdt_amount);
+
+            //update accounts
+            self.add_green_points(consumer_id, consumer_green_points);
+            self.add_green_points(merchant_id, merchant_green_points);
+
+            //convert to d9
+            let conversion_result = self.amm_get_d9(usdt_amount);
+            if let Err(e) = conversion_result {
+                return Err(e);
+            }
+
+            // sendf to mining pool
+            let d9_amount = conversion_result.unwrap().1;
+            let to_mining_pool_result = self.send_to_mining_pool(d9_amount);
+            if let Err(e) = to_mining_pool_result {
+                return Err(e);
+            }
+
+            //emit event
+            self.env().emit_event(GreenPointsTransaction {
+                merchant: GreenPointsCreated {
+                    account_id: merchant_id,
+                    green_points: merchant_green_points,
+                },
+                consumer: GreenPointsCreated {
+                    account_id: consumer_id,
+                    green_points: consumer_green_points,
+                },
+            });
+
+            Ok(GreenPointsResult {
+                merchant: merchant_green_points,
+                consumer: consumer_green_points,
+            })
+        }
+
+        #[ink(message, payable)]
+        pub fn give_green_points_d9(
+            &mut self,
+            consumer_id: AccountId
+        ) -> Result<GreenPointsResult, Error> {
+            let merchant_id = self.env().caller();
+            let validate_merchant = self.validate_merchant(merchant_id);
+            if let Err(e) = validate_merchant {
+                return Err(e);
+            }
+            let d9_amount = self.env().transferred_value();
+
+            //convert to usdt
+            let conversion_result = self.amm_get_usdt(d9_amount);
+            if let Err(e) = conversion_result {
+                return Err(e);
+            }
+            let usdt_amount = conversion_result.unwrap().1;
+            self.give_green_points_usdt(consumer_id, usdt_amount)
+        }
+
+        #[ink(message, payable)]
+        pub fn pay_merchant_usdt(
+            &mut self,
+            merchant_id: AccountId,
+            usdt_amount: Balance
+        ) -> Result<GreenPointsResult, Error> {
+            let consumer_id = self.env().caller();
+            let validate_merchant = self.validate_merchant(merchant_id);
+            if let Err(e) = validate_merchant {
+                return Err(e);
+            }
+            //check usdt transfer
+            let validate_result = self.validate_usdt_transfer(consumer_id, usdt_amount);
+            if let Err(e) = validate_result {
+                return Err(e);
+            }
+
+            self.process_payment(consumer_id, merchant_id, usdt_amount)
+        }
+
+        /// a customer pays a merchant using d9
+        #[ink(message, payable)]
+        pub fn pay_merchant_d9(
+            &mut self,
+            merchant_id: AccountId
+        ) -> Result<GreenPointsResult, Error> {
+            let payer = self.env().caller();
+            let d9_amount = self.env().transferred_value();
+            // validate merchant account
+            let validate_merchant = self.validate_merchant(merchant_id);
+            if let Err(e) = validate_merchant {
+                return Err(e);
+            }
+
+            //convert to usdt
+            let conversion_result = self.amm_get_usdt(d9_amount);
+            if conversion_result.is_err() {
+                return Err(Error::AMMConversionFailed);
+            }
+
+            //process payments
+            let usdt_amount = conversion_result.unwrap().1;
+            self.process_payment(payer, merchant_id, usdt_amount)
+        }
+
+        fn process_payment(
+            &mut self,
+            consumer_id: AccountId,
+            merchant_id: AccountId,
+            usdt_amount: Balance
+        ) -> Result<GreenPointsResult, Error> {
+            //send usdt to merchant
+            let eighty_four_percent = Perbill::from_rational(84u32, 100u32);
+            let merchant_payment = eighty_four_percent.mul_floor(usdt_amount);
+            let send_usdt_result = self.send_usdt(merchant_id, merchant_payment);
+            if let Err(e) = send_usdt_result {
+                return Err(e);
+            }
+
+            //process green points
+            let usdt_to_green = usdt_amount.saturating_sub(merchant_payment);
+            let green_points = self.calculate_green_points(usdt_to_green);
+
+            //update accounts
+            self.add_green_points(merchant_id, green_points);
+            self.add_green_points(consumer_id, green_points);
+
+            // convert usdt to d9
+            let conversion_result = self.convert_to_d9(usdt_to_green);
+            if let Err(e) = conversion_result {
+                return Err(e);
+            }
+            let d9_amount = conversion_result.unwrap();
+
+            //send to mining pool
+
+            let mining_pool_transfer = self.send_to_mining_pool(d9_amount);
+            if let Err(e) = mining_pool_transfer {
+                return Err(e);
+            }
+
+            self.env().emit_event(GreenPointsTransaction {
+                merchant: GreenPointsCreated {
+                    account_id: merchant_id,
+                    green_points,
+                },
+                consumer: GreenPointsCreated {
+                    account_id: consumer_id,
+                    green_points,
+                },
+            });
+
+            Ok(GreenPointsResult {
+                merchant: green_points,
+                consumer: green_points,
+            })
+        }
+
+        #[ink(message)]
+        pub fn get_expiry(&self, account_id: AccountId) -> Result<Timestamp, Error> {
+            let expiry = self.merchant_expiry.get(&account_id);
+            match expiry {
+                Some(expiry) => Ok(expiry),
+                None => Err(Error::NoMerchantAccountFound),
+            }
+        }
+
+        #[ink(message)]
+        /// get account details
+        pub fn get_account(&self, account_id: AccountId) -> Option<Account> {
+            self.accounts.get(&account_id)
+        }
+
+        #[ink(message)]
+        pub fn change_amm_contract(&mut self, new_amm_contract: AccountId) -> Result<(), Error> {
+            self.only_admin()?;
+            self.amm_contract = new_amm_contract;
+            Ok(())
+        }
+
+        #[ink(message)]
+        pub fn change_mining_pool(&mut self, new_mining_pool: AccountId) -> Result<(), Error> {
+            self.only_admin()?;
+            self.mining_pool = new_mining_pool;
+            Ok(())
+        }
+
+        fn validate_usdt_transfer(&self, account: AccountId, amount: Balance) -> Result<(), Error> {
+            let check_balance_result = self.validate_usdt_balance(account, amount);
+            if check_balance_result.is_err() {
+                return Err(Error::UserUSDTBalanceInsufficient);
+            }
+            let check_allowance_result = self.validate_usdt_allowance(account, amount);
+            if check_allowance_result.is_err() {
+                return Err(Error::InsufficientAllowance);
+            }
+            Ok(())
+        }
+
+        fn validate_usdt_balance(
+            &self,
+            account_id: AccountId,
+            amount: Balance
+        ) -> Result<(), Error> {
+            let usdt_balance = build_call::<D9Environment>()
+                .call(self.usdt_contract)
+                .gas_limit(0)
+                .exec_input(
+                    ExecutionInput::new(
+                        Selector::new(selector_bytes!("PSP22::balance_of"))
+                    ).push_arg(account_id)
+                )
+                .returns::<Balance>()
+                .invoke();
+            if usdt_balance < amount {
+                return Err(Error::UserUSDTBalanceInsufficient);
+            }
+            Ok(())
+        }
+
+        pub fn validate_usdt_allowance(
+            &self,
+            owner: AccountId,
+            amount: Balance
+        ) -> Result<(), Error> {
+            let allowance = build_call::<D9Environment>()
+                .call(self.usdt_contract)
+                .gas_limit(0)
+                .exec_input(
+                    ExecutionInput::new(Selector::new(selector_bytes!("PSP22::allowance")))
+                        .push_arg(owner)
+                        .push_arg(self.env().account_id())
+                )
+                .returns::<Balance>()
+                .invoke();
+            if allowance < amount {
+                return Err(Error::InsufficientAllowance);
+            }
+            Ok(())
+        }
+
+        /// make sure it is a valid merchant account and their subscription is not expired
+        fn validate_merchant(&self, account_id: AccountId) -> Result<(), Error> {
+            let merchant_expiry_option: Option<Timestamp> = self.merchant_expiry.get(&account_id);
+            if merchant_expiry_option.is_none() {
+                return Err(Error::NoMerchantAccountFound);
+            }
+            let merchant_expiry = merchant_expiry_option.unwrap();
+            if merchant_expiry < self.env().block_timestamp() {
+                return Err(Error::MerchantAccountExpired);
+            }
+            Ok(())
+        }
+
+        fn convert_to_d9(&self, amount: Balance) -> Result<Balance, Error> {
+            let grant_allowance_result = self.grant_amm_allowance(amount);
+            if grant_allowance_result.is_err() {
+                return Err(Error::GrantingAllowanceFailed);
+            }
+            let conversion_result = self.amm_get_d9(amount);
+            if conversion_result.is_err() {
+                return Err(Error::AMMConversionFailed);
+            }
+            let (_, d9_amount) = conversion_result.unwrap();
+
+            Ok(d9_amount)
+        }
+
+        fn send_usdt(&self, recipient: AccountId, amount: Balance) -> Result<(), Error> {
+            build_call::<D9Environment>()
+                .call(self.usdt_contract)
+                .gas_limit(0)
+                .exec_input(
+                    ExecutionInput::new(Selector::new(selector_bytes!("PSP22::transfer")))
+                        .push_arg(recipient)
+                        .push_arg(amount)
+                        .push_arg([0u8])
+                )
+                .returns::<Result<(), Error>>()
+                .invoke()
+        }
+
+        pub fn receive_usdt_from_user(
+            &self,
+            sender: AccountId,
+            amount: Balance
+        ) -> Result<(), Error> {
+            build_call::<D9Environment>()
+                .call(self.usdt_contract)
+                .gas_limit(0)
+                .exec_input(
+                    ExecutionInput::new(Selector::new(selector_bytes!("PSP22::transfer_from")))
+                        .push_arg(sender)
+                        .push_arg(self.env().account_id())
+                        .push_arg(amount)
+                        .push_arg([0u8])
+                )
+                .returns::<Result<(), Error>>()
+                .invoke()
+        }
+
+        fn grant_amm_allowance(&self, amount: Balance) -> Result<(), Error> {
+            build_call::<D9Environment>()
+                .call(self.usdt_contract)
+                .gas_limit(0)
+                .exec_input(
+                    ExecutionInput::new(Selector::new(selector_bytes!("PSP22::approve")))
+                        .push_arg(self.amm_contract)
+                        .push_arg(amount)
+                )
+                .returns::<Result<(), Error>>()
+                .invoke()
+        }
+
+        ///convert received usdt to d9 which will go to mining pool
+        fn amm_get_d9(&self, amount: Balance) -> Result<(Currency, Balance), Error> {
+            build_call::<D9Environment>()
+                .call(self.amm_contract)
+                .gas_limit(0)
+                .exec_input(
+                    ExecutionInput::new(Selector::new(selector_bytes!("get_d9"))).push_arg(amount)
+                )
+                .returns::<Result<(Currency, Balance), Error>>()
+                .invoke()
+        }
+
+        /// call amm contract to get usdt, which will go to merchant
+        fn amm_get_usdt(&self, amount: Balance) -> Result<(Currency, Balance), Error> {
+            build_call::<D9Environment>()
+                .call(self.amm_contract)
+                .gas_limit(0)
+                .transferred_value(amount)
+                .exec_input(ExecutionInput::new(Selector::new(selector_bytes!("get_usdt"))))
+                .returns::<Result<(Currency, Balance), Error>>()
+                .invoke()
+        }
+
+        /// function to restrict access to admin
+        fn only_admin(&self) -> Result<(), Error> {
+            let caller = self.env().caller();
+            if caller != self.admin {
+                return Err(Error::OnlyAdmin);
+            }
+            Ok(())
+        }
+
+        ///get green points from usdt amount
+        fn calculate_green_points(&self, amount: Balance) -> Balance {
+            amount.saturating_mul(100)
+        }
+
+        /// base rate calculation is based on time.acceleration is based on ancestors
+        ///
+        /// 1 red point = 1 green point
+        fn calculate_red_points_from_time(
+            &self,
+            green_points: Balance,
+            last_redeem_timestamp: Timestamp
+        ) -> Balance {
+            // rate green points => red points
+            let transmutation_rate = Perbill::from_rational(1u32, 2000u32);
+
+            let days_since_last_redeem = self
+                .env()
+                .block_timestamp()
+                .saturating_sub(last_redeem_timestamp)
+                .saturating_div(self.milliseconds_day) as Balance;
+
+            let base_red_points = transmutation_rate
+                .mul_floor(green_points)
+                .saturating_mul(days_since_last_redeem);
+
+            base_red_points
+        }
+
+        /// acceleration rate calculation is based on ancestors
+        ///
+        /// 10% for parent, 1% for each ancestor
+        fn calculate_red_points_from_relationships(
+            &self,
+            green_points: Balance,
+            referral_coefficients: (Balance, Balance)
+        ) -> Balance {
+            // let transmutation_rate = Perbill::from_rational(1u32, 2000u32);
+            let transmutation_rate = Perbill::from_rational(1u32, 2000u32);
+
+            let ten_percent = Perbill::from_rational(1u32, 10u32);
+            let sons_factored_green_points = ten_percent
+                .mul_floor(referral_coefficients.0)
+                .saturating_mul(green_points);
+
+            let one_percent = Perbill::from_rational(1u32, 100u32);
+            let grandsons_factored_green_points = one_percent
+                .mul_floor(referral_coefficients.1)
+                .saturating_mul(green_points);
+
+            let red_points_from_sons = transmutation_rate.mul_floor(sons_factored_green_points);
+            let red_points_from_grandsons = transmutation_rate.mul_floor(
+                grandsons_factored_green_points
+            );
+
+            let total_red_points = red_points_from_sons.saturating_add(red_points_from_grandsons);
+            total_red_points
+        }
+
+        /// send some amount to the mining pool
+        fn send_to_mining_pool(&self, amount: Balance) -> Result<(), Error> {
+            build_call::<D9Environment>()
+                .call(self.mining_pool)
+                .gas_limit(0) // replace with an appropriate gas limit
+                .transferred_value(amount)
+                .exec_input(
+                    ExecutionInput::new(
+                        Selector::new(ink::selector_bytes!("process_merchant_payment"))
+                    )
+                )
+                .returns::<Result<(), Error>>()
+                .invoke()
         }
 
         pub fn get_ancestors(&self, account_id: AccountId) -> Option<Vec<AccountId>> {
@@ -266,32 +717,32 @@ mod d9_merchant_mining {
             }
         }
 
-        fn pay_ancestors(
-            &self,
-            allowance: Balance,
-            ancestors: &[AccountId]
-        ) -> Result<Balance, Error> {
-            let mut remainder = allowance;
+        fn add_green_points(&mut self, account_id: AccountId, amount: Balance) {
+            let mut account = self.accounts
+                .get(&account_id)
+                .unwrap_or(Account::new(self.env().block_timestamp()));
+            account.green_points = account.green_points.saturating_add(amount);
+            self.accounts.insert(account_id, &account);
+        }
 
-            // Calculate 10% for the parent
-            let ten_percent = Perbill::from_percent(10).mul_floor(allowance);
-            let parent = ancestors[0];
-            self.transfer(parent, ten_percent)?;
-            remainder = remainder.saturating_sub(ten_percent);
-
-            // Calculate 1% for the rest of the ancestors
-            let one_percent = Perbill::from_percent(1).mul_floor(allowance);
-            for ancestor in ancestors.iter().skip(1) {
-                self.transfer(*ancestor, one_percent)?;
-                remainder = remainder.saturating_sub(one_percent);
+        fn update_ancestors_coefficients(&mut self, ancestors: &[AccountId]) -> Result<(), Error> {
+            //modify parent
+            let parent = ancestors.first().unwrap();
+            if let Some(mut account) = self.accounts.get(parent) {
+                account.relationship_factors.0 += 1;
+                account.relationship_factors = account.relationship_factors;
+                self.accounts.insert(parent, &account);
             }
 
-            Ok(remainder)
-        }
-        fn transfer(&self, account_id: AccountId, amount: Balance) -> Result<(), Error> {
-            self.env()
-                .transfer(account_id, amount)
-                .map_err(|_| Error::TransferFailed)
+            //modify others
+            for ancestor in ancestors.iter().skip(1) {
+                if let Some(mut account) = self.accounts.get(ancestor) {
+                    account.relationship_factors.1 += 1;
+                    account.relationship_factors = account.relationship_factors;
+                    self.accounts.insert(ancestor, &account);
+                }
+            }
+            Ok(())
         }
     }
 
@@ -330,7 +781,11 @@ mod d9_merchant_mining {
 
             //build contract
             let subscription_fee: Balance = 10_000_000;
-            let contract = D9MerchantMining::new(subscription_fee, default_accounts.bob);
+            let contract = D9MerchantMining::new(
+                subscription_fee,
+                default_accounts.bob,
+                default_accounts.charlie
+            );
             (default_accounts, contract)
         }
 
@@ -348,6 +803,35 @@ mod d9_merchant_mining {
                 current_block_time + move_forward_by
             );
             let _ = ink::env::test::advance_block::<ink::env::DefaultEnvironment>();
+        }
+
+        fn get_expiry() {
+            let (default_accounts, mut contract) = default_setup();
+
+            //prep contract calling env
+            init_calling_env(default_accounts.alice);
+
+            //create subscription
+            let payment_amount: Balance = 1000;
+            set_value_transferred::<DefaultEnvironment>(payment_amount);
+            let subscription_result = contract.subscribe();
+            assert!(subscription_result.is_ok());
+            //one month
+            assert_eq!(subscription_result.unwrap(), 2592000000);
+
+            //check account
+            let expiry = contract.get_expiry(default_accounts.alice);
+            assert_eq!(expiry, Ok(2592000000));
+        }
+
+        #[ink::test]
+        fn validate_merchant() {
+            let (default_accounts, mut contract) = default_setup();
+
+            //prep contract calling env
+            init_calling_env(default_accounts.alice);
+
+            contract.merchant.expiry.insert(default_accounts.alice, 1000);
         }
 
         #[ink::test]
@@ -379,7 +863,7 @@ mod d9_merchant_mining {
             let current_block_time = ink::env::block_timestamp::<ink::env::DefaultEnvironment>();
             assert_eq!(result, Ok(current_block_time + ONE_MONTH_MILLISECONDS));
 
-            let merchant_expiry = contract.get_expiry(new_merchant);
+            // let merchant_expiry = contract.get_expiryOk()(new_merchant);z
             assert_eq!(merchant_expiry, Ok(current_block_time + ONE_MONTH_MILLISECONDS));
         }
 
@@ -441,7 +925,10 @@ mod d9_merchant_mining {
             let one_hundred_days = 100 * contract.milliseconds_day;
             set_block_time(last_redeem_timestamp + one_hundred_days);
 
-            let red_points = contract.calculate_red_points(200_000_000, last_redeem_timestamp);
+            let red_points = contract.calculate_red_points_from_time(
+                200_000_000,
+                last_redeem_timestamp
+            );
 
             assert_eq!(red_points, 1_000_000)
         }
@@ -453,7 +940,7 @@ mod d9_merchant_mining {
             //create subscription
             let payment_amount: Balance = 10_000_000;
             set_value_transferred::<DefaultEnvironment>(payment_amount);
-            let subscription_result = contract.d9_subscribe();
+            let subscription_result = contract.subscribe();
             assert!(subscription_result.is_ok());
             //one month
             assert_eq!(subscription_result.unwrap(), 2592000000);
@@ -473,7 +960,7 @@ mod d9_merchant_mining {
             //create subscription
             let subscription_amount: Balance = 10_000_000_000_000;
             set_value_transferred::<DefaultEnvironment>(subscription_amount);
-            let _ = contract.d9_subscribe();
+            let _ = contract.subscribe();
 
             //give green points
             let payment_amount: Balance = 10_000_000_000_000;
@@ -501,7 +988,7 @@ mod d9_merchant_mining {
             //create subscription
             let subscription_amount: Balance = 10_000_000;
             set_value_transferred::<DefaultEnvironment>(subscription_amount);
-            let _ = contract.d9_subscribe();
+            let _ = contract.subscribe();
 
             //give green points
             let payment_amount: Balance = 10000;
@@ -511,7 +998,7 @@ mod d9_merchant_mining {
 
             //redeem d9
             set_caller::<DefaultEnvironment>(default_accounts.bob);
-            let redemption_result = contract.redeem_d9();
+            let redemption_result = contract.redeem_usdt();
             println!("green_points_result: {:?}", redemption_result);
             assert!(redemption_result.is_ok());
         }

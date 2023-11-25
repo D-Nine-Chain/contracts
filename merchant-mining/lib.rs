@@ -10,7 +10,7 @@ mod d9_merchant_mining {
     use sp_arithmetic::Perbill;
     use ink::prelude::vec::Vec;
     use ink::env::call::{ build_call, ExecutionInput, Selector };
-    use ink::selector_bytes;
+    use ink::{ selector_bytes };
 
     #[derive(Decode, Encode)]
     #[cfg_attr(
@@ -80,6 +80,8 @@ mod d9_merchant_mining {
         OnlyAdmin,
         GrantingAllowanceFailed,
         AMMConversionFailed,
+        FailedToReceiveUSDT,
+        FailedToConvertToD9,
     }
 
     #[ink(event)]
@@ -140,6 +142,11 @@ mod d9_merchant_mining {
             }
         }
 
+        #[ink(message)]
+        pub fn who_am_i(&self, who_is_this: AccountId) -> (bool, bool, bool) {
+            let who_am_i = self.env().caller();
+            (who_am_i == who_is_this, who_am_i == self.admin, who_is_this == self.admin)
+        }
         /// create merchant account subscription
         #[ink(message)]
         pub fn subscribe(&mut self, usdt_amount: Balance) -> Result<Timestamp, Error> {
@@ -284,8 +291,8 @@ mod d9_merchant_mining {
                 return Err(e);
             }
             let receive_usdt_result = self.receive_usdt_from_user(merchant_id, usdt_amount);
-            if let Err(e) = receive_usdt_result {
-                return Err(e);
+            if receive_usdt_result.is_err() {
+                return Err(Error::FailedToReceiveUSDT);
             }
 
             // calculate green points
@@ -298,13 +305,13 @@ mod d9_merchant_mining {
             self.add_green_points(merchant_id, merchant_green_points);
 
             //convert to d9
-            let conversion_result = self.amm_get_d9(usdt_amount);
+            let conversion_result = self.convert_to_d9(usdt_amount);
             if let Err(e) = conversion_result {
                 return Err(e);
             }
 
             // sendf to mining pool
-            let d9_amount = conversion_result.unwrap().1;
+            let d9_amount = conversion_result.unwrap();
             let to_mining_pool_result = self.send_to_mining_pool(d9_amount);
             if let Err(e) = to_mining_pool_result {
                 return Err(e);
@@ -543,7 +550,7 @@ mod d9_merchant_mining {
             Ok(())
         }
 
-        fn convert_to_d9(&self, amount: Balance) -> Result<Balance, Error> {
+        fn convert_to_d9(&mut self, amount: Balance) -> Result<Balance, Error> {
             let grant_allowance_result = self.grant_amm_allowance(amount);
             if grant_allowance_result.is_err() {
                 return Err(Error::GrantingAllowanceFailed);
@@ -590,7 +597,7 @@ mod d9_merchant_mining {
                 .invoke()
         }
 
-        fn grant_amm_allowance(&self, amount: Balance) -> Result<(), Error> {
+        fn grant_amm_allowance(&mut self, amount: Balance) -> Result<(), Error> {
             build_call::<D9Environment>()
                 .call(self.usdt_contract)
                 .gas_limit(0)

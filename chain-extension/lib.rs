@@ -1,9 +1,10 @@
 #![cfg_attr(not(feature = "std"), no_std, no_main)]
 use ink::{ env::Environment, prelude::vec::Vec };
 use scale::{ Decode, Encode };
+// use scale_info::TypeInfo;
 #[derive(Debug, Clone, PartialEq, Eq)]
 #[cfg_attr(feature = "std", derive(scale_info::TypeInfo))]
-pub enum D9Environment {}
+pub struct D9Environment {}
 
 impl Environment for D9Environment {
     const MAX_EVENT_TOPICS: usize = <ink::env::DefaultEnvironment as Environment>::MAX_EVENT_TOPICS;
@@ -39,7 +40,16 @@ pub trait D9ChainExtension {
 pub enum RuntimeError {
     NoReferralAccountRecord,
 }
+// impl TypeInfo for RuntimeError {
+//     type Identity = Self;
 
+//     fn type_info() -> Type {
+//         Type::builder()
+//             .path(Path::new("RuntimeError", module_path!()))
+//             .variant(Variants::new().variant("NoReferralAccountRecord", |v| v.index(0)))
+//             .build()
+//     }
+// }
 impl From<scale::Error> for RuntimeError {
     fn from(_: scale::Error) -> Self {
         panic!("encountered unexpected invalid SCALE encoding")

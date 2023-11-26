@@ -1,13 +1,31 @@
 #![cfg_attr(not(feature = "std"), no_std, no_main)]
-use scale::{ Decode, Encode };
-#[ink::contract]
+
+pub use d9_chain_extension::D9Environment;
+
+#[ink::contract(env = D9Environment)]
 mod mining_pool {
     use super::*;
+    use scale::{ Decode, Encode };
     use sp_arithmetic::Perbill;
+    use ink::env::call::{ build_call, ExecutionInput, Selector };
+    use ink::selector_bytes;
+
+    #[derive(Encode, Decode, Debug, PartialEq, Eq, Copy, Clone)]
+    #[cfg_attr(feature = "std", derive(scale_info::TypeInfo))]
+    pub enum Currency {
+        D9,
+        USDT,
+    }
+    #[derive(Encode, Decode, Debug, PartialEq, Eq, Copy, Clone)]
+    #[cfg_attr(feature = "std", derive(scale_info::TypeInfo))]
+    pub struct Direction(Currency, Currency);
+
     #[derive(Encode, Decode, Debug, PartialEq, Eq, Copy, Clone)]
     #[cfg_attr(feature = "std", derive(scale_info::TypeInfo))]
     pub enum Error {
-        onlyCallableBy(AccountId),
+        OnlyCallableBy(AccountId),
+        FailedToGetExchangeAmount,
+        FailedToTransferD9ToUser,
     }
 
     #[ink(storage)]
@@ -15,6 +33,7 @@ mod mining_pool {
         main_contract: AccountId,
         merchant_contract: AccountId,
         node_reward_pool: AccountId,
+        amm_contract: AccountId,
         admin: AccountId,
     }
 
@@ -24,38 +43,71 @@ mod mining_pool {
         pub fn new(
             main_contract: AccountId,
             merchant_contract: AccountId,
-            node_reward_pool: AccountId
+            node_reward_pool: AccountId,
+            amm_contract: AccountId
         ) -> Self {
             Self {
                 main_contract,
                 node_reward_pool,
                 merchant_contract,
+                amm_contract,
                 admin: Self::env().caller(),
             }
         }
 
-        /// Simply returns the current value of our `bool`.
-        #[ink(message)]
-        pub fn withdraw(&self) -> Result<(), Error> {
-            let caller = self.env().caller();
-            let balance = self.env().balance();
-            if caller == self.main_contract {
-                self.env().transfer(caller, balance);
-            }
-            Ok(())
-        }
-
         #[ink(message, payable)]
         pub fn process_merchant_payment(&self) -> Result<(), Error> {
-            let _ = self.only_callable_by(self.merchant_contract);
-            let caller = self.env().caller();
+            let valid_caller = self.only_callable_by(self.merchant_contract);
+            if let Err(e) = valid_caller {
+                return Err(e);
+            }
             let received_amount = self.env().transferred_value();
             let three_percent = Perbill::from_percent(3);
             let amount_to_pool = three_percent.mul_floor(received_amount);
-            let transfer_to_pool_result = self
-                .env()
-                .transfer(self.node_reward_pool, amount_to_pool);
+            let _ = self.env().transfer(self.node_reward_pool, amount_to_pool);
             Ok(())
+        }
+
+        #[ink(message)]
+        pub fn merchant_user_redeem_d9(
+            &self,
+            user_account: AccountId,
+            redeemable_usdt: Balance
+        ) -> Result<Balance, Error> {
+            let valid_caller = self.only_callable_by(self.merchant_contract);
+            if let Err(e) = valid_caller {
+                return Err(e);
+            }
+            let amount_request = self.get_exchange_amount(
+                Direction(Currency::USDT, Currency::D9),
+                redeemable_usdt
+            );
+            if amount_request.is_err() {
+                return Err(Error::FailedToGetExchangeAmount);
+            }
+            let d9_amount = amount_request.unwrap();
+            let transfer_to_user_result = self.env().transfer(user_account, d9_amount);
+            if transfer_to_user_result.is_err() {
+                return Err(Error::FailedToTransferD9ToUser);
+            }
+            Ok(d9_amount)
+        }
+
+        fn get_exchange_amount(
+            &self,
+            direction: Direction,
+            amount: Balance
+        ) -> Result<Balance, Error> {
+            build_call::<D9Environment>()
+                .call(self.amm_contract)
+                .gas_limit(0)
+                .exec_input(
+                    ExecutionInput::new(Selector::new(selector_bytes!("calculate_exchange")))
+                        .push_arg(direction)
+                        .push_arg(amount)
+                )
+                .returns::<Result<Balance, Error>>()
+                .invoke()
         }
 
         #[ink(message)]
@@ -77,6 +129,12 @@ mod mining_pool {
             self.node_reward_pool = node_reward_contract;
             Ok(())
         }
+        #[ink(message)]
+        pub fn change_amm_contract(&mut self, amm_contract: AccountId) -> Result<(), Error> {
+            let _ = self.only_callable_by(self.admin);
+            self.amm_contract = amm_contract;
+            Ok(())
+        }
 
         #[ink(message)]
         pub fn change_main_contract(&mut self, main_contract: AccountId) -> Result<(), Error> {
@@ -85,10 +143,10 @@ mod mining_pool {
             Ok(())
         }
 
-        fn only_callable_by(&self, accountId: AccountId) -> Result<(), Error> {
+        fn only_callable_by(&self, account_id: AccountId) -> Result<(), Error> {
             let caller = self.env().caller();
-            if caller != accountId {
-                return Err(Error::onlyCallableBy(accountId));
+            if caller != account_id {
+                return Err(Error::OnlyCallableBy(account_id));
             }
             Ok(())
         }

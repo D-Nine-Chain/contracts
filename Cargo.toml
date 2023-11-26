@@ -11,5 +11,4 @@ members = [
    "d9-test-utils",
    "mining-pool",
    "node-reward",
-
 ]

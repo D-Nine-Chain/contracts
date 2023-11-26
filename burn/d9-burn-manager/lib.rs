@@ -67,7 +67,11 @@ mod d9_burn_manager {
         ///
         /// Returns `Ok` with the updated portfolio on success.
         #[ink(message, payable)]
-        pub fn burn(&mut self, burn_contract: AccountId) -> Result<BurnPortfolio, Error> {
+        pub fn burn(
+            &mut self,
+            burn_benefactor: AccountId,
+            burn_contract: AccountId
+        ) -> Result<BurnPortfolio, Error> {
             let caller = self.env().caller();
             let burn_amount = self.env().transferred_value();
 
@@ -82,7 +86,9 @@ mod d9_burn_manager {
             }
 
             // Make the cross-contract call
-            let balance_increase = match self.execute_burn(caller, burn_amount, burn_contract) {
+            let balance_increase = match
+                self.execute_burn(burn_benefactor, burn_amount, burn_contract)
+            {
                 Ok(balance) => balance,
                 Err(e) => {
                     return Err(e);

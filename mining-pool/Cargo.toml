@@ -5,12 +5,13 @@ authors = ["D9"]
 edition = "2021"
 
 [dependencies]
+d9-chain-extension = { version = "0.1.0", path = "../chain-extension", default-features = false }
 ink = { version = "4.3.0", default-features = false }
 sp-arithmetic = { version = "19", default-features = false }
-scale = { package = "parity-scale-codec", version = "3", default-features = false, features = [
+scale = { package = "parity-scale-codec", version = "3.6.5", default-features = false, features = [
    "derive",
 ] }
-scale-info = { version = "2.6", default-features = false, features = [
+scale-info = { version = "2.10.0", default-features = false, features = [
    "derive",
 ], optional = true }
 
@@ -22,6 +23,12 @@ path = "lib.rs"
 
 [features]
 default = ["std"]
-std = ["ink/std", "scale/std", "scale-info/std"]
+std = [
+   "ink/std",
+   "scale/std",
+   "scale-info/std",
+   "sp-arithmetic/std",
+   "d9-chain-extension/std",
+]
 ink-as-dependency = []
 e2e-tests = []

@@ -15,20 +15,16 @@ overflow-checks = false
 
 [dependencies]
 ink = { version = "4.3.0", default-features = false }
-
 d9-chain-extension = { version = "0.1.0", path = "../chain-extension", default-features = false }
 scale = { package = "parity-scale-codec", version = "3", default-features = false, features = [
    "derive",
 ] }
 sp-arithmetic = { version = "19", default-features = false }
-scale-info = { version = "2.9", default-features = false, features = [
+scale-info = { version = "2.10.0", default-features = false, features = [
    "derive",
 ], optional = true }
 substrate-fixed = { default-features = false, git = "https://github.com/encointer/substrate-fixed" }
-# [dependencies.fixed]
-# default-features = false
-# git = "https://github.com/encointer/substrate-fixed"
-# package = "substrate-fixed"
+
 
 [dev-dependencies]
 ink_e2e = "4.2.0"
@@ -38,12 +34,6 @@ path = "lib.rs"
 
 [features]
 default = ["std"]
-std = [
-   "ink/std",
-   "scale/std",
-   "scale-info/std",
-   "d9-chain-extension/std",
-   # "d9-usdt/std",
-]
+std = ["ink/std", "scale/std", "scale-info/std", "d9-chain-extension/std"]
 ink-as-dependency = []
 e2e-tests = []

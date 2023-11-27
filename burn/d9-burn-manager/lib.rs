@@ -69,7 +69,7 @@ mod d9_burn_manager {
         #[ink(message, payable)]
         pub fn burn(
             &mut self,
-            burn_benefactor: AccountId,
+            burn_beneficiary: AccountId,
             burn_contract: AccountId
         ) -> Result<BurnPortfolio, Error> {
             let caller = self.env().caller();
@@ -87,7 +87,7 @@ mod d9_burn_manager {
 
             // Make the cross-contract call
             let balance_increase = match
-                self.execute_burn(burn_benefactor, burn_amount, burn_contract)
+                self.execute_burn(burn_beneficiary, burn_amount, burn_contract)
             {
                 Ok(balance) => balance,
                 Err(e) => {
@@ -102,7 +102,7 @@ mod d9_burn_manager {
             };
             self.total_amount_burned = self.total_amount_burned.saturating_add(burn_amount);
 
-            let mut portfolio = self.portfolios.get(caller).unwrap_or(BurnPortfolio {
+            let mut portfolio = self.portfolios.get(burn_beneficiary).unwrap_or(BurnPortfolio {
                 amount_burned: 0,
                 balance_due: 0,
                 balance_paid: 0,
@@ -118,7 +118,7 @@ mod d9_burn_manager {
                 from: caller,
                 amount: burn_amount,
             });
-            self.portfolios.insert(caller, &portfolio);
+            self.portfolios.insert(burn_beneficiary, &portfolio);
             Ok(portfolio.clone()) // clone for returning; original is in the map
         }
 

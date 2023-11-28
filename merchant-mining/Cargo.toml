@@ -22,7 +22,7 @@ scale-info = { version = "2.10.0", default-features = false, features = [
 
 [dev-dependencies]
 ink_e2e = "4.2.0"
-
+mining_pool = { version = "0.1.0", path = "../mining-pool", default-features = false }
 [lib]
 path = "lib.rs"
 

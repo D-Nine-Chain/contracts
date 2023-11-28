@@ -243,14 +243,12 @@ mod d9_merchant_mining {
             account.green_points = account.green_points.saturating_sub(convertible_red_points);
 
             //calculated red points => d9 conversion
-            // let redeemable_d9 = red_points.saturating_div(100);
             let redeemable_usdt = convertible_red_points.saturating_div(100);
             let redeem_result = self.mining_pool_redeem(caller, redeemable_usdt);
             if redeem_result.is_err() {
                 return Err(Error::RedeemD9TransferFailed);
             }
             let d9_amount = redeem_result.unwrap();
-
             //update account
             account.redeemed_d9 = account.redeemed_d9.saturating_add(d9_amount);
             account.last_conversion = Some(self.env().block_timestamp());
@@ -269,7 +267,7 @@ mod d9_merchant_mining {
             redeemable_usdt: Balance
         ) -> Result<Balance, Error> {
             build_call::<D9Environment>()
-                .call(self.amm_contract)
+                .call(self.mining_pool)
                 .gas_limit(0)
                 .exec_input(
                     ExecutionInput::new(Selector::new(selector_bytes!("merchant_user_redeem_d9")))
@@ -358,7 +356,7 @@ mod d9_merchant_mining {
             if conversion_result.is_err() {
                 return Err(Error::GettingUSDTFromAMM);
             }
-            let usdt_amount = conversion_result.unwrap().1;
+            let usdt_amount = conversion_result.unwrap();
             self.give_green_points_usdt(consumer_id, usdt_amount)
         }
 
@@ -378,8 +376,12 @@ mod d9_merchant_mining {
             if let Err(e) = validate_result {
                 return Err(e);
             }
+            let receive_usdt_result = self.receive_usdt_from_user(consumer_id, usdt_amount);
+            if receive_usdt_result.is_err() {
+                return Err(Error::ReceivingUSDTFromUser);
+            }
 
-            self.process_payment(consumer_id, merchant_id, usdt_amount)
+            self.finish_processing_payment(consumer_id, merchant_id, usdt_amount)
         }
 
         /// a customer pays a merchant using d9
@@ -403,11 +405,11 @@ mod d9_merchant_mining {
             }
 
             //process payments
-            let usdt_amount = conversion_result.unwrap().1;
-            self.process_payment(payer, merchant_id, usdt_amount)
+            let usdt_amount = conversion_result.unwrap();
+            self.finish_processing_payment(payer, merchant_id, usdt_amount)
         }
 
-        fn process_payment(
+        fn finish_processing_payment(
             &mut self,
             consumer_id: AccountId,
             merchant_id: AccountId,
@@ -416,10 +418,7 @@ mod d9_merchant_mining {
             //send usdt to merchant
             let eighty_four_percent = Perbill::from_rational(84u32, 100u32);
             let merchant_payment = eighty_four_percent.mul_floor(usdt_amount);
-            let receive_usdt_result = self.receive_usdt_from_user(consumer_id, usdt_amount);
-            if receive_usdt_result.is_err() {
-                return Err(Error::ReceivingUSDTFromUser);
-            }
+
             let send_usdt_result = self.send_usdt(merchant_id, merchant_payment);
             if send_usdt_result.is_err() {
                 return Err(Error::SendUSDTToMerchant);
@@ -441,7 +440,6 @@ mod d9_merchant_mining {
             let d9_amount = conversion_result.unwrap();
 
             //send to mining pool
-
             let mining_pool_transfer = self.send_to_mining_pool(d9_amount);
             if mining_pool_transfer.is_err() {
                 return Err(Error::SendingD9ToMiningPool);
@@ -569,7 +567,7 @@ mod d9_merchant_mining {
             if conversion_result.is_err() {
                 return Err(Error::AMMConversionFailed);
             }
-            let (_, d9_amount) = conversion_result.unwrap();
+            let d9_amount = conversion_result.unwrap();
 
             Ok(d9_amount)
         }
@@ -621,25 +619,26 @@ mod d9_merchant_mining {
         }
 
         ///convert received usdt to d9 which will go to mining pool
-        fn amm_get_d9(&self, amount: Balance) -> Result<(Currency, Balance), Error> {
+        fn amm_get_d9(&self, amount: Balance) -> Result<Balance, Error> {
             build_call::<D9Environment>()
                 .call(self.amm_contract)
                 .gas_limit(0)
                 .exec_input(
                     ExecutionInput::new(Selector::new(selector_bytes!("get_d9"))).push_arg(amount)
                 )
-                .returns::<Result<(Currency, Balance), Error>>()
+                .returns::<Result<Balance, Error>>()
                 .invoke()
         }
 
         /// call amm contract to get usdt, which will go to merchant
-        fn convert_to_usdt(&self, amount: Balance) -> Result<(Currency, Balance), Error> {
+
+        fn convert_to_usdt(&self, amount: Balance) -> Result<Balance, Error> {
             build_call::<D9Environment>()
                 .call(self.amm_contract)
                 .gas_limit(0)
                 .transferred_value(amount)
                 .exec_input(ExecutionInput::new(Selector::new(selector_bytes!("get_usdt"))))
-                .returns::<Result<(Currency, Balance), Error>>()
+                .returns::<Result<Balance, Error>>()
                 .invoke()
         }
 
@@ -744,11 +743,13 @@ mod d9_merchant_mining {
 
         fn update_ancestors_coefficients(&mut self, ancestors: &[AccountId]) {
             //modify parent
-            let parent = ancestors.first().unwrap();
-            if let Some(mut account) = self.accounts.get(parent) {
-                account.relationship_factors.0 += 1;
-                account.relationship_factors = account.relationship_factors;
-                self.accounts.insert(parent, &account);
+            let parent = ancestors.first();
+            if let Some(parent) = parent {
+                if let Some(mut account) = self.accounts.get(parent) {
+                    account.relationship_factors.0 += 1;
+                    account.relationship_factors = account.relationship_factors;
+                    self.accounts.insert(parent, &account);
+                }
             }
 
             //modify others
@@ -767,6 +768,8 @@ mod d9_merchant_mining {
     /// The below code is technically just normal Rust code.
     #[cfg(test)]
     mod tests {
+        use core::default;
+
         /// Imports all the definitions from the outer scope so we can use them here.
         use super::*;
         use ink::env::DefaultEnvironment;
@@ -796,9 +799,8 @@ mod d9_merchant_mining {
             let default_accounts = init_accounts();
 
             //build contract
-            let subscription_fee: Balance = 10_000_000;
             let contract = D9MerchantMining::new(
-                subscription_fee,
+                default_accounts.alice,
                 default_accounts.bob,
                 default_accounts.charlie
             );
@@ -821,199 +823,26 @@ mod d9_merchant_mining {
             let _ = ink::env::test::advance_block::<ink::env::DefaultEnvironment>();
         }
 
-        fn get_expiry() {
-            let (default_accounts, mut contract) = default_setup();
-
-            //prep contract calling env
-            init_calling_env(default_accounts.alice);
-
-            //create subscription
-            let payment_amount: Balance = 1000;
-            set_value_transferred::<DefaultEnvironment>(payment_amount);
-            let subscription_result = contract.subscribe();
-            assert!(subscription_result.is_ok());
-            //one month
-            assert_eq!(subscription_result.unwrap(), 2592000000);
-
-            //check account
-            let expiry = contract.get_expiry(default_accounts.alice);
-            assert_eq!(expiry, Ok(2592000000));
-        }
-
-        #[ink::test]
-        fn validate_merchant() {
-            let (default_accounts, mut contract) = default_setup();
-
-            //prep contract calling env
-            init_calling_env(default_accounts.alice);
-
-            contract.merchant.expiry.insert(default_accounts.alice, 1000);
-        }
-
-        #[ink::test]
-        fn subscription_fail_insufficient_payment() {
-            let (default_accounts, mut contract) = default_setup();
-
-            //prep contract calling env
-            init_calling_env(default_accounts.alice);
-
-            //create subscription
-            let below_minimum_payment: Balance = 1_000_000;
-            let result = contract.update_subscription(
-                default_accounts.alice,
-                below_minimum_payment
-            );
-
-            assert_eq!(result, Err(Error::InsufficientPayment));
-        }
-
-        #[ink::test]
-        fn successfully_create_new_subscription() {
-            let (default_accounts, mut contract) = default_setup();
-
-            //prep new merchant account
-            let new_merchant = default_accounts.alice;
-            let payment_amount: Balance = 10_000_000;
-            let result = contract.update_subscription(new_merchant, payment_amount);
-
-            let current_block_time = ink::env::block_timestamp::<ink::env::DefaultEnvironment>();
-            assert_eq!(result, Ok(current_block_time + ONE_MONTH_MILLISECONDS));
-
-            // let merchant_expiry = contract.get_expiryOk()(new_merchant);z
-            assert_eq!(merchant_expiry, Ok(current_block_time + ONE_MONTH_MILLISECONDS));
-        }
-
-        #[ink::test]
-        fn update_expired_subscription() {
-            let (default_accounts, mut contract) = default_setup();
-
-            //default time to jan 1
-            let janurary_first_2023: Timestamp = 1672545661000; // 4:01:01 AM GMT+8
-            set_block_time(janurary_first_2023);
-
-            //create a new subscription
-            let one_month_subscription_fee: Balance = 10_000_000;
-            let _ = contract.update_subscription(
-                default_accounts.alice,
-                one_month_subscription_fee
-            );
-
-            // move time forward so as to expire subscription
-            move_time_forward(2 * ONE_MONTH_MILLISECONDS);
-
-            // renew new subscription
-            let new_block_time = ink::env::block_timestamp::<ink::env::DefaultEnvironment>();
-            let _ = contract.update_subscription(
-                default_accounts.alice,
-                one_month_subscription_fee
-            );
-
-            let expiry = contract.get_expiry(default_accounts.alice).unwrap();
-            assert_eq!(expiry, new_block_time + ONE_MONTH_MILLISECONDS);
-        }
-
-        #[ink::test]
-        fn update_unexpired_subscription() {
-            let (default_accounts, mut contract) = default_setup();
-
-            //init time
-            let janurary_first_2023: Timestamp = 1672545661000; // 4:01:01 AM GMT+8
-            set_block_time(janurary_first_2023);
-
-            //setup initial subscription
-            let new_merchant = default_accounts.alice;
-            let one_month_subscription_fee = 10_000_000;
-            let _ = contract.update_subscription(new_merchant, one_month_subscription_fee);
-
-            move_time_forward(ONE_MONTH_MILLISECONDS / 2);
-
-            let _ = contract.update_subscription(new_merchant, one_month_subscription_fee).unwrap();
-            let merchant_expiry = contract.get_expiry(new_merchant).unwrap();
-            assert_eq!(merchant_expiry, janurary_first_2023 + 2 * ONE_MONTH_MILLISECONDS + 6);
-        }
-
-        #[ink::test]
-        fn calculate_red_points() {
-            let (_, contract) = default_setup();
-
-            // calculate red point
-            let last_redeem_timestamp = ink::env::block_timestamp::<ink::env::DefaultEnvironment>();
-            let one_hundred_days = 100 * contract.milliseconds_day;
-            set_block_time(last_redeem_timestamp + one_hundred_days);
-
-            let red_points = contract.calculate_red_points_from_time(
-                200_000_000,
-                last_redeem_timestamp
-            );
-
-            assert_eq!(red_points, 1_000_000)
-        }
-
-        #[ink::test]
-        fn pay_for_subscription() {
-            let (default_accounts, mut contract) = default_setup();
-            init_calling_env(default_accounts.alice);
-            //create subscription
-            let payment_amount: Balance = 10_000_000;
-            set_value_transferred::<DefaultEnvironment>(payment_amount);
-            let subscription_result = contract.subscribe();
-            assert!(subscription_result.is_ok());
-            //one month
-            assert_eq!(subscription_result.unwrap(), 2592000000);
-
-            //check account
-            let expiry = contract.get_expiry(default_accounts.alice);
-            assert_eq!(expiry, Ok(2592000000));
-        }
-
-        #[ink::test]
-        fn give_green_points() {
-            let (default_accounts, mut contract) = default_setup();
-
-            //prep contract calling env
-            init_calling_env(default_accounts.alice);
-
-            //create subscription
-            let subscription_amount: Balance = 10_000_000_000_000;
-            set_value_transferred::<DefaultEnvironment>(subscription_amount);
-            let _ = contract.subscribe();
-
-            //give green points
-            let payment_amount: Balance = 10_000_000_000_000;
-            set_value_transferred::<DefaultEnvironment>(payment_amount);
-            let green_points_result = contract.give_green_points(default_accounts.bob);
-
-            //check
-            assert!(green_points_result.is_ok());
-            let (account_id, green_points) = green_points_result.unwrap();
-            assert_eq!(account_id, default_accounts.bob);
-            assert_eq!(green_points, payment_amount * 100);
-            let account_result = contract.get_account(default_accounts.bob);
-            assert!(account_result.is_ok());
-            let account = account_result.unwrap();
-            assert_eq!(account.green_points, payment_amount * 100);
-        }
-
         #[ink::test]
         fn redeem_d9() {
             let (default_accounts, mut contract) = default_setup();
 
             //prep contract calling env
             init_calling_env(default_accounts.alice);
-
-            //create subscription
-            let subscription_amount: Balance = 10_000_000;
-            set_value_transferred::<DefaultEnvironment>(subscription_amount);
-            let _ = contract.subscribe();
-
-            //give green points
-            let payment_amount: Balance = 10000;
-            set_value_transferred::<DefaultEnvironment>(payment_amount);
-            let _ = contract.give_green_points(default_accounts.bob);
-            move_time_forward(86_400_000 * 100);
+            let account: Account = Account {
+                green_points: 200000000,
+                relationship_factors: (0, 0),
+                last_conversion: None,
+                redeemed_usdt: 0,
+                redeemed_d9: 0,
+                created_at: 0,
+            };
+            set_block_time(0);
+            contract.accounts.insert(default_accounts.alice, &account);
+            move_time_forward(100_000_000);
 
             //redeem d9
-            set_caller::<DefaultEnvironment>(default_accounts.bob);
+            set_caller::<DefaultEnvironment>(default_accounts.alice);
             let redemption_result = contract.redeem_d9();
             println!("green_points_result: {:?}", redemption_result);
             assert!(redemption_result.is_ok());
@@ -1030,61 +859,20 @@ mod d9_merchant_mining {
         /// Imports all the definitions from the outer scope so we can use them here.
         use super::*;
         /// A helper function used for calling contract messages.
-        use ink_e2e::build_message;
-
+        use ink_e2e::{ build_message, account_id, AccountKeyring };
+        use mining_pool::mining_pool::MiningPool;
+        use mining_pool::mining_pool::MiningPoolRef;
         /// The End-to-End test `Result` type.
         type E2EResult<T> = std::result::Result<T, Box<dyn std::error::Error>>;
-
         /// We test that we can upload and instantiate the contract using its default constructor.
         #[ink_e2e::test]
-        async fn default_works(mut client: ink_e2e::Client<C, E>) -> E2EResult<()> {
-            // Given
-            let constructor = D9ConsumerMiningRef::default();
-
-            // When
-            let contract_account_id = client
-                .instantiate("d9_consumer_mining", &ink_e2e::alice(), constructor, 0, None).await
-                .expect("instantiate failed").account_id;
-
-            // Then
-            let get = build_message::<D9ConsumerMiningRef>(contract_account_id.clone()).call(
-                |d9_consumer_mining| d9_consumer_mining.get()
+        async fn mining_pool_processing_works(mut client: ink_e2e::Client<C, E>) -> E2EResult<()> {
+            // mining pool construction
+            let constructor = D9MerchantMiningRef::new(
+                client.alice().account_id,
+                client.bob().account_id,
+                client.charlie().account_id
             );
-            let get_result = client.call_dry_run(&ink_e2e::alice(), &get, 0, None).await;
-            assert!(matches!(get_result.return_value(), false));
-
-            Ok(())
-        }
-
-        /// We test that we can read and write a value from the on-chain contract contract.
-        #[ink_e2e::test]
-        async fn it_works(mut client: ink_e2e::Client<C, E>) -> E2EResult<()> {
-            // Given
-            let constructor = D9ConsumerMiningRef::new(false);
-            let contract_account_id = client
-                .instantiate("d9_consumer_mining", &ink_e2e::bob(), constructor, 0, None).await
-                .expect("instantiate failed").account_id;
-
-            let get = build_message::<D9ConsumerMiningRef>(contract_account_id.clone()).call(
-                |d9_consumer_mining| d9_consumer_mining.get()
-            );
-            let get_result = client.call_dry_run(&ink_e2e::bob(), &get, 0, None).await;
-            assert!(matches!(get_result.return_value(), false));
-
-            // When
-            let flip = build_message::<D9ConsumerMiningRef>(contract_account_id.clone()).call(
-                |d9_consumer_mining| d9_consumer_mining.flip()
-            );
-            let _flip_result = client
-                .call(&ink_e2e::bob(), flip, 0, None).await
-                .expect("flip failed");
-
-            // Then
-            let get = build_message::<D9ConsumerMiningRef>(contract_account_id.clone()).call(
-                |d9_consumer_mining| d9_consumer_mining.get()
-            );
-            let get_result = client.call_dry_run(&ink_e2e::bob(), &get, 0, None).await;
-            assert!(matches!(get_result.return_value(), true));
 
             Ok(())
         }

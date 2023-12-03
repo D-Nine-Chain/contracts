@@ -1,0 +1,37 @@
+[package]
+name = "cross_chain_transfer"
+version = "0.1.0"
+authors = ["[your_name] <[your_email]>"]
+edition = "2021"
+
+[dependencies]
+ink = { version = "4.2.0", default-features = false }
+d9-chain-extension = { version = "0.1.0", path = "../chain-extension", default-features = false }
+bs58 = { version = "0.5.0", default-features = false, optional = true }
+scale = { package = "parity-scale-codec", version = "3", default-features = false, features = [
+   "derive",
+] }
+hex = { version = "0.4.3", default-features = false }
+
+scale-info = { version = "2.6", default-features = false, features = [
+   "derive",
+], optional = true }
+
+[dev-dependencies]
+ink_e2e = "4.2.0"
+
+[lib]
+path = "lib.rs"
+
+[features]
+default = ["std"]
+std = [
+   "ink/std",
+   "scale/std",
+   "scale-info/std",
+   "d9-chain-extension/std",
+   "hex/std",
+   "bs58/std",
+]
+ink-as-dependency = []
+e2e-tests = []

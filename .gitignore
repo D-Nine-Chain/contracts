@@ -16,3 +16,5 @@ Cargo.lock
 **/rust-toolchain
 
 **/.DS_Store
+**/cache
+**/artifacts

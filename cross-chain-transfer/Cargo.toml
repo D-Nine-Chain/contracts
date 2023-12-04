@@ -11,15 +11,15 @@ bs58 = { version = "0.5.0", default-features = false, optional = true }
 scale = { package = "parity-scale-codec", version = "3", default-features = false, features = [
    "derive",
 ] }
-hex = { version = "0.4.3", default-features = false }
 
 scale-info = { version = "2.6", default-features = false, features = [
    "derive",
 ], optional = true }
+hex = { version = "0.4.3", default-features = false, features = ["alloc"] }
 
 [dev-dependencies]
 ink_e2e = "4.2.0"
-
+d9_usdt = { version = "0.1.0", path = "../tokens/usdt", default-features = false }
 [lib]
 path = "lib.rs"
 
@@ -30,8 +30,8 @@ std = [
    "scale/std",
    "scale-info/std",
    "d9-chain-extension/std",
-   "hex/std",
    "bs58/std",
+   "hex/std",
 ]
 ink-as-dependency = []
 e2e-tests = []

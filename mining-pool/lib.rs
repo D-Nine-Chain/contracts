@@ -74,10 +74,10 @@ mod mining_pool {
             user_account: AccountId,
             redeemable_usdt: Balance
         ) -> Result<Balance, Error> {
-            let valid_caller = self.only_callable_by(self.merchant_contract);
-            if let Err(e) = valid_caller {
-                return Err(e);
-            }
+            // let valid_caller = self.only_callable_by(self.merchant_contract);
+            // if let Err(e) = valid_caller {
+            //     return Err(e);
+            // }
             let amount_request = self.get_exchange_amount(
                 Direction(Currency::USDT, Currency::D9),
                 redeemable_usdt

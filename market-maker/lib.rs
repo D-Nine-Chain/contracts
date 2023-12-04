@@ -6,9 +6,10 @@ mod market_maker {
     use scale::{ Decode, Encode };
     use ink::storage::Mapping;
     use ink::selector_bytes;
+    use sp_arithmetic::Perbill;
     use ink::env::call::{ build_call, ExecutionInput, Selector };
-    use substrate_fixed::{ FixedU128, types::extra::U6 };
-    type FixedBalance = FixedU128<U6>;
+    use substrate_fixed::{ FixedU128, types::extra::U12 };
+    type FixedBalance = FixedU128<U12>;
     #[ink(storage)]
     pub struct MarketMaker {
         /// contract for usdt coin
@@ -61,10 +62,11 @@ mod market_maker {
         InsufficientLiquidityProvided,
         USDTBalanceInsufficient,
         LiquidityProviderNotFound,
-        LiquidityAddedBeyondTolerance,
+        LiquidityAddedBeyondTolerance(Balance, Balance),
         InsufficientLPTokens,
         InsufficientContractLPTokens,
         DivisionByZero,
+        MultiplicationError,
         USDTTooSmall,
         USDTTooMuch,
     }
@@ -106,23 +108,23 @@ mod market_maker {
         #[ink(message, payable)]
         pub fn add_liquidity(&mut self, usdt_liquidity: Balance) -> Result<(), Error> {
             let caller = self.env().caller();
-
-            let d9_liquidity = self.env().transferred_value();
             // greeater than zero checks
+            let d9_liquidity = self.env().transferred_value();
             if usdt_liquidity == 0 || d9_liquidity == 0 {
                 return Err(Error::D9orUSDTProvidedLiquidityAtZero);
-            }
-            let validity_check = self.usdt_validity_check(caller, usdt_liquidity);
-            if let Err(e) = validity_check {
-                return Err(e);
             }
 
             let (d9_reserves, usdt_reserves) = self.get_currency_reserves();
             if usdt_reserves != 0 && d9_reserves != 0 {
-                let liquidity_check = self.check_new_liquidity(usdt_liquidity, d9_liquidity);
-                if let Err(e) = liquidity_check {
-                    return Err(e);
-                }
+                //  let liquidity_check = self.check_new_liquidity(usdt_liquidity, d9_liquidity);
+                //  if let Err(e) = liquidity_check {
+                //      return Err(e);
+                //  }
+            }
+
+            let validity_check = self.usdt_validity_check(caller, usdt_liquidity);
+            if let Err(e) = validity_check {
+                return Err(e);
             }
 
             // receive usdt from user
@@ -151,11 +153,22 @@ mod market_maker {
             let d9_liquidity = liquidity_percent.saturating_mul_int(d9_reserves);
             let usdt_liquidity = liquidity_percent.saturating_mul_int(usdt_reserves);
 
+            // get fee portion
+            let fee_portion = liquidity_percent.saturating_mul(
+                FixedBalance::from_num(self.fee_total)
+            );
+            self.fee_total = self.fee_total.saturating_sub(fee_portion.to_num::<Balance>());
+
+            let d9_plus_fee_portion = d9_liquidity.saturating_add(fee_portion);
+
             // Transfer payouts
-            let transfer_result = self.env().transfer(caller, d9_liquidity.to_num::<Balance>());
+            let transfer_result = self
+                .env()
+                .transfer(caller, d9_plus_fee_portion.to_num::<Balance>());
             if transfer_result.is_err() {
                 return Err(Error::MarketMakerHasInsufficientFunds(Currency::D9));
             }
+
             let send_usdt_result = self.send_usdt_to_user(
                 caller,
                 usdt_liquidity.to_num::<Balance>()
@@ -187,50 +200,68 @@ mod market_maker {
             usdt_liquidity: Balance,
             d9_liquidity: Balance
         ) -> Result<(), Error> {
-            let usdt_mult_factor = 10_000_000_000;
             let (d9_reserves, usdt_reserves) = self.get_currency_reserves();
+            let fixed_usdt_reserves = FixedBalance::from_num(usdt_reserves);
+            let fixed_d9_reserves = FixedBalance::from_num(d9_reserves);
+            let fixed_usdt_liquidity = FixedBalance::from_num(usdt_liquidity);
+            let fixed_d9_liquidity = FixedBalance::from_num(d9_liquidity);
 
-            let current_price_option: Option<FixedBalance> = FixedBalance::from_num(
-                usdt_reserves.saturating_mul(usdt_mult_factor)
-            ).checked_div(FixedBalance::from_num(d9_reserves));
-            let current_price = match current_price_option {
-                Some(price) => price,
+            // Use a fixed-point representation for precision, or a library that supports large number arithmetic
+            let checked_ratio = fixed_d9_reserves.checked_div(fixed_usdt_reserves);
+            let ratio = match checked_ratio {
+                Some(r) => r,
                 None => {
                     return Err(Error::DivisionByZero);
                 }
             };
-            let new_price_option: Option<FixedBalance> = FixedBalance::from_num(
-                usdt_liquidity.saturating_mul(usdt_mult_factor)
-            ).checked_div(FixedBalance::from_num(d9_liquidity));
 
-            let new_price = match new_price_option {
-                Some(price) => price,
+            let checked_threshold_percent = FixedBalance::from_num(
+                self.liquidity_tolerance_percent
+            ).checked_div(FixedBalance::from_num(100));
+            let threshold_percent = match checked_threshold_percent {
+                Some(t) => t,
                 None => {
                     return Err(Error::DivisionByZero);
                 }
             };
+
+            let checked_threshold = threshold_percent.checked_mul(ratio);
+            let threshold = match checked_threshold {
+                Some(t) => t,
+                None => {
+                    return Err(Error::MultiplicationError);
+                }
+            };
+
+            let new_ratio = FixedBalance::from_num(
+                fixed_d9_reserves
+                    .saturating_add(fixed_d9_liquidity)
+                    .checked_div(fixed_usdt_reserves.saturating_add(fixed_usdt_liquidity))
+                    .unwrap_or(FixedBalance::from_num(0))
+            );
 
             let price_difference = {
-                if current_price > new_price {
-                    current_price.saturating_sub(new_price)
+                if new_ratio > ratio {
+                    new_ratio.saturating_sub(ratio)
                 } else {
-                    new_price.saturating_sub(current_price)
+                    ratio.saturating_sub(new_ratio)
                 }
             };
 
-            let difference_percent = price_difference.checked_div(current_price).unwrap();
-            let threshold = FixedBalance::from_num(self.liquidity_tolerance_percent)
-                .checked_div(FixedBalance::from_num(100))
-                .unwrap();
-            if threshold < difference_percent {
-                return Err(Error::LiquidityAddedBeyondTolerance);
+            if threshold < price_difference {
+                return Err(
+                    Error::LiquidityAddedBeyondTolerance(
+                        threshold.to_num::<Balance>(),
+                        price_difference.to_num::<Balance>()
+                    )
+                );
             }
             Ok(())
         }
         //   fn calculate_price(&self, amount: Balance) -> Balance {}
         /// sell usdt
         #[ink(message)]
-        pub fn get_d9(&mut self, usdt: Balance) -> Result<(Currency, Balance), Error> {
+        pub fn get_d9(&mut self, usdt: Balance) -> Result<Balance, Error> {
             let caller: AccountId = self.env().caller();
 
             // receive sent usdt from caller
@@ -253,22 +284,23 @@ mod market_maker {
                 return Err(e);
             }
             let d9 = d9_calc_result.unwrap();
+            let transaction_fee = self.calc_fee(d9);
+            let d9_minus_fee = d9.saturating_sub(transaction_fee);
+
             // send d9
             // let fee: Balance = self.calculate_fee(&d9)?;
             // let d9_minus_fee = d9.saturating_sub(fee);
-            let transfer_result = self.env().transfer(caller, d9);
+            let transfer_result = self.env().transfer(caller, d9_minus_fee);
             if transfer_result.is_err() {
                 return Err(Error::MarketMakerHasInsufficientFunds(Currency::D9));
             }
 
-            Ok((Currency::D9, d9))
+            Ok(d9)
         }
 
         /// sell d9
         #[ink(message, payable)]
-        pub fn get_usdt(&mut self) -> Result<(Currency, Balance), Error> {
-            let caller: AccountId = self.env().caller();
-
+        pub fn get_usdt(&mut self) -> Result<Balance, Error> {
             let direction = Direction(Currency::D9, Currency::USDT);
             // calculate amount
             let d9: Balance = self.env().transferred_value();
@@ -339,14 +371,14 @@ mod market_maker {
         fn usdt_validity_check(&self, caller: AccountId, amount: Balance) -> Result<(), Error> {
             // does sender have sufficient usdt
             let usdt_balance_check_result = self.check_usdt_balance(caller, amount);
-            if usdt_balance_check_result.is_err() {
-                return Err(usdt_balance_check_result.unwrap_err());
+            if let Err(e) = usdt_balance_check_result {
+                return Err(e);
             }
 
             // did sender provider sufficient allowance permission
             let usdt_allowance_check = self.check_usdt_allowance(caller, amount);
-            if usdt_allowance_check.is_err() {
-                return Err(usdt_allowance_check.unwrap_err());
+            if let Err(e) = usdt_allowance_check {
+                return Err(e);
             }
             Ok(())
         }
@@ -375,6 +407,11 @@ mod market_maker {
             let amount_1: Balance = balance_1.saturating_sub(new_balance_1);
 
             Ok(amount_1)
+        }
+
+        fn calc_fee(&self, amount: Balance) -> Balance {
+            let fee_percent = Perbill::from_percent(self.fee_percent);
+            fee_percent.mul_floor(amount)
         }
 
         fn get_currency_balance(&self, currency: Currency) -> Balance {
@@ -473,6 +510,7 @@ mod market_maker {
         use ink::env::test::default_accounts;
         use substrate_fixed::{ FixedU128, types::extra::U6 };
         type FixedBalance = FixedU128<U6>;
+        use sp_arithmetic::Perbill;
         //   #[ink::test]
         //   fn can_build() {
         //       let default_accounts = ink::env::test::default_accounts::<ink::env::DefaultEnvironment>;
@@ -490,35 +528,29 @@ mod market_maker {
         //   }
         #[ink::test]
         fn check_new_liquidity() {
-            let usdt_mult_factor = 10_000_000_000;
-            let d9_liquidity: Balance = 1_100_000_000_000_000;
-            let usdt_liquidity: Balance = 150_00;
+            let d9_liquidity: Balance = 10000_000_000_000_000;
+            let usdt_liquidity: Balance = 8500_00;
+            let (d9_reserves, usdt_reserves): (Balance, Balance) = (100_000_000_000_000, 100_00);
 
-            let (d9_reserves, usdt_reserves): (Balance, Balance) = (1_000_000_000_000_000, 1000_00);
-            let current_price_option: Option<FixedBalance> = FixedBalance::from_num(
-                usdt_reserves.saturating_mul(usdt_mult_factor)
-            ).checked_div(FixedBalance::from_num(d9_reserves));
-            let current_price = current_price_option.unwrap();
-            println!("current price is: {}", current_price);
-            let new_price_option: Option<FixedBalance> = FixedBalance::from_num(
-                usdt_liquidity.saturating_mul(usdt_mult_factor)
-            ).checked_div(FixedBalance::from_num(d9_liquidity));
+            let ratio = d9_reserves.saturating_div(usdt_reserves);
+            let threshold_percent = Perbill::from_percent(10);
 
-            let new_price = new_price_option.unwrap();
-            println!("new price is: {}", new_price);
+            let threshold = threshold_percent.mul_floor(ratio);
+            println!("threshold: {}", threshold);
+            let new_ratio = d9_reserves
+                .saturating_add(d9_liquidity)
+                .saturating_div(usdt_reserves.saturating_add(usdt_liquidity));
+            println!("new ratio: {}", new_ratio);
             let price_difference = {
-                if current_price > new_price {
-                    current_price.saturating_sub(new_price)
+                if ratio > new_ratio {
+                    ratio.saturating_sub(new_ratio)
                 } else {
-                    new_price.saturating_sub(current_price)
+                    new_ratio.saturating_sub(ratio)
                 }
             };
-            let difference_percent = price_difference.checked_div(current_price).unwrap();
-            let threshold = FixedBalance::from_num(10)
-                .checked_div(FixedBalance::from_num(100))
-                .unwrap();
-            println!("price difference percent: {}", difference_percent);
-            assert!(difference_percent < threshold)
+            println!("price difference: {}", price_difference);
+
+            assert!(price_difference < threshold)
         }
         //   #[ink::test]
         //   fn new_liquidity_is_within_threshold_range() {

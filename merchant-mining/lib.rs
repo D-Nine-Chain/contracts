@@ -12,6 +12,20 @@ mod d9_merchant_mining {
     use ink::env::call::{ build_call, ExecutionInput, Selector };
     use ink::selector_bytes;
 
+    #[ink(storage)]
+    pub struct D9MerchantMining {
+        /// accountId to mercchat account expiry date
+        /// rewards system accounts
+        merchant_expiry: Mapping<AccountId, Timestamp>,
+        accounts: Mapping<AccountId, Account>,
+        subscription_fee: Balance,
+        usdt_contract: AccountId,
+        amm_contract: AccountId,
+        main_contract: AccountId,
+        milliseconds_day: Timestamp,
+        admin: AccountId,
+    }
+
     #[derive(Encode, Decode, Debug, PartialEq, Eq, Copy, Clone)]
     #[cfg_attr(feature = "std", derive(scale_info::TypeInfo))]
     pub enum Currency {
@@ -113,20 +127,6 @@ mod d9_merchant_mining {
         green_points: Balance,
     }
 
-    #[ink(storage)]
-    pub struct D9MerchantMining {
-        /// accountId to mercchat account expiry date
-        /// rewards system accounts
-        merchant_expiry: Mapping<AccountId, Timestamp>,
-        accounts: Mapping<AccountId, Account>,
-        subscription_fee: Balance,
-        usdt_contract: AccountId,
-        amm_contract: AccountId,
-        mining_pool: AccountId,
-        milliseconds_day: Timestamp,
-        admin: AccountId,
-    }
-
     impl D9MerchantMining {
         /// Constructor that initializes the `bool` value to the given `init_value`.
         #[ink(constructor)]
@@ -139,7 +139,7 @@ mod d9_merchant_mining {
                 admin: Self::env().caller(),
                 amm_contract,
                 usdt_contract,
-                mining_pool,
+                main_contract,
                 merchant_expiry: Default::default(),
                 accounts: Default::default(),
                 subscription_fee: 1000,
@@ -261,13 +261,14 @@ mod d9_merchant_mining {
 
             Ok(d9_amount)
         }
+
         fn mining_pool_redeem(
             &self,
             user_account: AccountId,
             redeemable_usdt: Balance
         ) -> Result<Balance, Error> {
             build_call::<D9Environment>()
-                .call(self.mining_pool)
+                .call(self.main_contract)
                 .gas_limit(0)
                 .exec_input(
                     ExecutionInput::new(Selector::new(selector_bytes!("merchant_user_redeem_d9")))
@@ -316,8 +317,8 @@ mod d9_merchant_mining {
 
             // send to mining pool
             let d9_amount = conversion_result.unwrap();
-            let to_mining_pool_result = self.send_to_mining_pool(d9_amount);
-            if to_mining_pool_result.is_err() {
+            let to_main_result = self.send_to_main(d9_amount);
+            if to_main_result.is_err() {
                 return Err(Error::SendingD9ToMiningPool);
             }
 
@@ -440,8 +441,8 @@ mod d9_merchant_mining {
             let d9_amount = conversion_result.unwrap();
 
             //send to mining pool
-            let mining_pool_transfer = self.send_to_mining_pool(d9_amount);
-            if mining_pool_transfer.is_err() {
+            let main_transfer_result = self.send_to_main(d9_amount);
+            if main_transfer_result.is_err() {
                 return Err(Error::SendingD9ToMiningPool);
             }
 
@@ -487,7 +488,7 @@ mod d9_merchant_mining {
         #[ink(message)]
         pub fn change_mining_pool(&mut self, new_mining_pool: AccountId) -> Result<(), Error> {
             self.only_admin()?;
-            self.mining_pool = new_mining_pool;
+            self.main_contract = new_mining_pool;
             Ok(())
         }
 
@@ -711,9 +712,9 @@ mod d9_merchant_mining {
         }
 
         /// send some amount to the mining pool
-        fn send_to_mining_pool(&self, amount: Balance) -> Result<(), Error> {
+        fn send_to_main(&self, amount: Balance) -> Result<(), Error> {
             build_call::<D9Environment>()
-                .call(self.mining_pool)
+                .call(self.main_contract)
                 .gas_limit(0) // replace with an appropriate gas limit
                 .transferred_value(amount)
                 .exec_input(

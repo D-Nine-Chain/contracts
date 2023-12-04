@@ -6,6 +6,22 @@ mod d9_burn_manager {
     use ink::storage::Mapping;
     use ink::prelude::vec::Vec;
     use ink::env::call::{ build_call, ExecutionInput, Selector };
+
+    /// Defines the storage of your contract.
+    /// Add new fields to the below struct in order
+    /// to add new static storage fields to your contract.
+    #[ink(storage)]
+    pub struct D9BurnManager {
+        admin: AccountId,
+        burn_contracts: Vec<AccountId>,
+        /// mapping of accountId and code_hash of logic contract to respective account data
+        portfolios: Mapping<AccountId, BurnPortfolio>,
+        /// total amount burned across all contracts
+        total_amount_burned: Balance,
+        node_reward_contract: AccountId,
+        _fallback_contract_node_reward: AccountId,
+    }
+
     #[ink(event)]
     pub struct WithdrawalExecuted {
         /// initiator of of the burn
@@ -26,18 +42,6 @@ mod d9_burn_manager {
         amount: Balance,
     }
 
-    /// Defines the storage of your contract.
-    /// Add new fields to the below struct in order
-    /// to add new static storage fields to your contract.
-    #[ink(storage)]
-    pub struct D9BurnManager {
-        admin: AccountId,
-        burn_contracts: Vec<AccountId>,
-        /// mapping of accountId and code_hash of logic contract to respective account data
-        portfolios: Mapping<AccountId, BurnPortfolio>,
-        /// total amount burned across all contracts
-        total_amount_burned: Balance,
-    }
     // /pdate_balance(remainder, last_withdrawal_timestamp, burn_contract);
     impl D9BurnManager {
         /// Constructor that initializes the `bool` value to the given `init_value`.
@@ -195,6 +199,19 @@ mod d9_burn_manager {
         #[ink(message)]
         pub fn get_portfolio(&self, account_id: AccountId) -> Option<BurnPortfolio> {
             self.portfolios.get(&account_id)
+        }
+
+        #[ink(message)]
+        pub fn node_reward_fallback(&mut self) {
+            self.node_reward_contract = self._fallback_contract_node_reward;
+        }
+
+        fn callable_by(&self, account_id: AccountId) -> Result<(), Error> {
+            let caller = self.env().caller();
+            if caller != account_id {
+                return Err(Error::InvalidCaller);
+            }
+            Ok(())
         }
 
         fn execute_burn(

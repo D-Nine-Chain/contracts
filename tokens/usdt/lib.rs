@@ -10,6 +10,16 @@ pub mod d9_usdt {
     pub enum Error {
         ApprovalError,
     }
+
+    #[ink(event)]
+    pub struct D9USDTTransfer {
+        #[ink(topic)]
+        from: AccountId,
+        #[ink(topic)]
+        to: AccountId,
+        amount: Balance,
+    }
+
     #[ink(storage)]
     #[derive(Default, Storage)]
     pub struct D9USDT {
@@ -35,6 +45,16 @@ pub mod d9_usdt {
             amount: Balance
         ) -> Result<(), PSP22Error> {
             psp22::Internal::_approve_from_to(self, owner, spender, amount)
+        }
+
+        #[ink(message)]
+        pub fn transfer_from(
+            &mut self,
+            from: AccountId,
+            to: AccountId,
+            amount: Balance
+        ) -> Result<(), PSP22Error> {
+            psp22::Internal::_transfer_from_to(self, from, to, amount, [0u8].to_vec())
         }
     }
 }

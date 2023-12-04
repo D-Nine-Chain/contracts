@@ -3,16 +3,20 @@ use scale::{ Decode, Encode };
 
 #[ink::contract]
 mod node_reward {
+    use ink::primitives::AccountId;
+
     use super::*;
-    #[derive(Encode, Decode, Debug, PartialEq, Eq, Copy, Clone)]
-    #[cfg_attr(feature = "std", derive(scale_info::TypeInfo))]
-    pub enum Error {
-        onlyCallableBy(AccountId),
-    }
+
     #[ink(storage)]
     pub struct NodeReward {
         admin: AccountId,
         main: AccountId,
+    }
+
+    #[derive(Encode, Decode, Debug, PartialEq, Eq, Copy, Clone)]
+    #[cfg_attr(feature = "std", derive(scale_info::TypeInfo))]
+    pub enum Error {
+        onlyCallableBy(AccountId),
     }
 
     impl NodeReward {
@@ -26,12 +30,12 @@ mod node_reward {
         }
 
         #[ink(message)]
-        pub fn change_main(&mut self, contract_address: AccountId) -> Result<(), Error> {
-            let caller = self.env().caller();
-            if caller != self.admin {
-                return Err(Error::onlyCallableBy(self.admin));
+        pub fn request_payment(&mut self, amount: u128) -> Result<(), Error> {
+            let valid_caller = self.only_callable_by(self.main);
+            if let Err(e) = valid_caller {
+                return Err(e);
             }
-            self.main = contract_address;
+            let _ = self.env().transfer(self.admin, amount);
             Ok(())
         }
     }

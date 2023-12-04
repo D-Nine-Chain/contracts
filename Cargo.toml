@@ -3,7 +3,7 @@ resolver = "2"
 members = [
    "burn/d9-burn-common",
    "burn/d9-burn-mining",
-   "burn/d9-burn-manager",
+   "main-pool",
    "chain-extension",
    "merchant-mining",
    "market-maker",
@@ -11,4 +11,5 @@ members = [
    "d9-test-utils",
    "mining-pool",
    "node-reward",
+   "cross-chain-transfer",
 ]

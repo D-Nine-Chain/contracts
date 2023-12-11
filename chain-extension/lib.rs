@@ -32,13 +32,22 @@ pub trait D9ChainExtension {
     ) -> Result<Option<Vec<<D9Environment as Environment>::AccountId>>, RuntimeError>;
 
     #[ink(extension = 2)]
-    fn burn(burn_amount: <D9Environment as Environment>::Balance) -> Result<(), RuntimeError>;
+    fn get_validators() -> Result<Vec<<D9Environment as Environment>::AccountId>, RuntimeError>;
+
+    #[ink(extension = 3)]
+    fn get_candidates() -> Result<Vec<<D9Environment as Environment>::AccountId>, RuntimeError>;
+
+    #[ink(extension = 4)]
+    fn get_current_session() -> Result<u32, RuntimeError>;
 }
 
 #[derive(Encode, Decode, Debug, PartialEq, Eq, Copy, Clone)]
 #[cfg_attr(feature = "std", derive(scale_info::TypeInfo))]
 pub enum RuntimeError {
     NoReferralAccountRecord,
+    ErrorGettingValidators,
+    ErrorGettingCandidates,
+    ErrorGettingSession,
 }
 // impl TypeInfo for RuntimeError {
 //     type Identity = Self;
@@ -61,6 +70,9 @@ impl ink::env::chain_extension::FromStatusCode for RuntimeError {
         match status_code {
             0 => Ok(()),
             1 => Err(Self::NoReferralAccountRecord),
+            2 => Err(Self::ErrorGettingValidators),
+            3 => Err(Self::ErrorGettingCandidates),
+            4 => Err(Self::ErrorGettingSession),
             _ => panic!("encountered unknown status code"),
         }
     }

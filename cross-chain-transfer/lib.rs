@@ -27,23 +27,21 @@ mod cross_chain_transfer {
     #[ink(event)]
     pub struct CommitCreated {
         #[ink(topic)]
-        pub tx_id: String,
+        pub transaction_id: String,
         #[ink(topic)]
-        pub from_address: [u8; 32],
-        #[ink(topic)]
-        pub to_address: [u8; 21],
+        pub from_address: AccountId,
         #[ink(topic)]
         pub amount: u128,
     }
 
     #[ink(event)]
-    pub struct TransferCompleted {
+    pub struct DispatchCompleted {
         #[ink(topic)]
         pub tx_id: String,
         #[ink(topic)]
         pub from_address: [u8; 21],
         #[ink(topic)]
-        pub to_address: [u8; 32],
+        pub to_address: AccountId,
         #[ink(topic)]
         pub amount: u128,
     }
@@ -59,12 +57,13 @@ mod cross_chain_transfer {
     #[cfg_attr(feature = "std", derive(scale_info::TypeInfo, ink::storage::traits::StorageLayout))]
     pub enum AddressType {
         Tron([u8; 21]),
-        D9([u8; 32]),
+        D9(AccountId),
     }
 
-    #[derive(Encode, Decode, Debug, PartialEq, Eq, Copy, Clone)]
+    #[derive(Encode, Decode, Debug, PartialEq, Eq, Clone)]
     #[cfg_attr(feature = "std", derive(scale_info::TypeInfo, ink::storage::traits::StorageLayout))]
     pub struct Transaction {
+        transaction_id: String,
         transaction_type: TransactionType,
         from_chain: Chain,
         from_address: AddressType,
@@ -89,6 +88,7 @@ mod cross_chain_transfer {
         TransactionAlreadyExists,
         InvalidAddressLength(Chain),
         InvalidHexString,
+        DecodedHexLengthInvalid,
         TronAddressInvalidByteLength,
         InvalidTronAddress,
         TronDecodeError,
@@ -137,44 +137,60 @@ mod cross_chain_transfer {
             hash_encoded::<Keccak256, _>(&encodable, &mut output);
             hex::encode(output)
         }
-
         #[ink(message)]
-        pub fn create_commit_transaction(
+        pub fn get_transaction(&self, tx_id: String) -> Option<Transaction> {
+            self.transactions.get(&tx_id)
+        }
+        #[ink(message)]
+        pub fn asset_commit(
             &mut self,
-            from_address: [u8; 32],
+            transaction_id: String,
+            from_address: AccountId,
             to_address: [u8; 21],
-            amount: u128
+            amount: Balance
         ) -> Result<String, Error> {
+            // only controller
             let caller_check = self.only_callable_by(self.controller);
             if let Err(e) = caller_check {
                 return Err(e);
             }
-            let validate_commit_result = self.validate_commit(from_address, to_address, amount);
+            // to_address to bytes
+            // let to_address_to_bytes_result = self.hex_to_bytes(&to_address);
+            // if let Err(e) = to_address_to_bytes_result {
+            //     return Err(e);
+            // }
+            // let to_address_bytes = to_address_to_bytes_result.unwrap();
+            if to_address.len() != 21 {
+                return Err(Error::TronAddressInvalidByteLength);
+            }
+            //validate commit
+            let validate_commit_result = self.validate_commit(&to_address, amount);
+
             if let Err(e) = validate_commit_result {
                 return Err(e);
             }
 
-            let on_chain_address = self.bytes_to_account_id(from_address);
-
-            let tx_id = self.generate_tx_id(on_chain_address);
-            let unique_transaction_check = self.ensure_unique_transaction(&tx_id);
+            //prepare transaction execution
+            let unique_transaction_check = self.ensure_unique_transaction(&transaction_id);
             if let Err(e) = unique_transaction_check {
                 return Err(e);
             }
 
-            let vaidate_usdt_transfer_result = self.validate_usdt_transfer(
-                on_chain_address,
-                amount
-            );
+            // validate usdt
+            let vaidate_usdt_transfer_result = self.validate_usdt_transfer(from_address, amount);
             if let Err(e) = vaidate_usdt_transfer_result {
                 return Err(e);
             }
-            let receive_usdt_result = self.receive_usdt(on_chain_address, amount);
+
+            //receive usdt
+            let receive_usdt_result = self.receive_usdt(from_address, amount);
             if let Err(e) = receive_usdt_result {
                 return Err(e);
             }
 
+            //store transaction
             let transaction = Transaction {
+                transaction_id: transaction_id.clone(),
                 transaction_type: TransactionType::Commit,
                 from_chain: Chain::D9,
                 from_address: AddressType::D9(from_address),
@@ -183,38 +199,37 @@ mod cross_chain_transfer {
                 timestamp: self.env().block_timestamp(),
             };
 
-            self.increase_transaction_nonce(on_chain_address);
-            self.transactions.insert(tx_id.clone(), &transaction);
+            self.increase_transaction_nonce(from_address);
+            self.transactions.insert(transaction_id.clone(), &transaction);
 
             self.env().emit_event(CommitCreated {
-                tx_id: tx_id.clone(),
+                transaction_id: transaction_id.clone(),
                 from_address,
-                to_address,
                 amount,
             });
-            Ok(tx_id)
+            Ok(transaction_id)
         }
 
         #[ink(message)]
-        pub fn create_transfer_transaction(
+        pub fn asset_dispatch(
             &mut self,
             from_address: [u8; 21],
-            to_address: [u8; 32],
-            amount: u128
+            to_address: AccountId,
+            amount: Balance
         ) -> Result<String, Error> {
             let caller_check = self.only_callable_by(self.controller);
             if let Err(e) = caller_check {
                 return Err(e);
             }
 
-            let on_chain_address = self.bytes_to_account_id(to_address);
-            let tx_id = self.generate_tx_id(on_chain_address);
+            let tx_id = self.generate_tx_id(to_address);
             let unique_transaction_check = self.ensure_unique_transaction(&tx_id);
             if let Err(e) = unique_transaction_check {
                 return Err(e);
             }
 
             let transaction = Transaction {
+                transaction_id: tx_id.clone(),
                 transaction_type: TransactionType::Transfer,
                 from_chain: Chain::TRON,
                 from_address: AddressType::Tron(from_address),
@@ -222,14 +237,19 @@ mod cross_chain_transfer {
                 amount,
                 timestamp: self.env().block_timestamp(),
             };
-            let send_usdt_result = self.send_usdt(on_chain_address, amount);
+            let send_usdt_result = self.send_usdt(to_address, amount);
             if send_usdt_result.is_err() {
                 return Err(Error::UnableToSendUSDT);
             }
 
             self.transactions.insert(tx_id.clone(), &transaction);
-            self.increase_transaction_nonce(on_chain_address);
-
+            self.increase_transaction_nonce(to_address);
+            self.env().emit_event(DispatchCompleted {
+                tx_id: tx_id.clone(),
+                from_address,
+                to_address,
+                amount,
+            });
             Ok(tx_id)
         }
 
@@ -258,15 +278,7 @@ mod cross_chain_transfer {
             self.new_admin = AccountId::from([0u8; 32]);
         }
 
-        fn validate_commit(
-            &self,
-            from_address: [u8; 32],
-            to_address: [u8; 21],
-            amount: Balance
-        ) -> Result<(), Error> {
-            if from_address.len() != 32 {
-                return Err(Error::InvalidAddressLength(Chain::D9));
-            }
+        fn validate_commit(&self, to_address: &[u8; 21], amount: Balance) -> Result<(), Error> {
             if to_address.len() != 21 {
                 return Err(Error::InvalidAddressLength(Chain::TRON));
             }
@@ -274,12 +286,6 @@ mod cross_chain_transfer {
                 return Err(Error::AmountMustBeGreaterThanZero);
             }
             Ok(())
-        }
-
-        fn bytes_to_account_id(&self, account_bytes: [u8; 32]) -> AccountId {
-            let mut account_id_bytes = [0u8; 32];
-            account_id_bytes.copy_from_slice(&account_bytes);
-            AccountId::from(account_id_bytes)
         }
 
         fn increase_transaction_nonce(&mut self, user_id: AccountId) {
@@ -380,6 +386,19 @@ mod cross_chain_transfer {
             Ok(())
         }
 
+        fn hex_to_bytes(&self, hex_str: &str) -> Result<[u8; 21], Error> {
+            let hex_decode_result = hex::decode(hex_str);
+            if hex_decode_result.is_err() {
+                return Err(Error::InvalidHexString);
+            }
+            let hex_vec = hex_decode_result.unwrap();
+            if hex_vec.len() != 21 {
+                return Err(Error::DecodedHexLengthInvalid);
+            }
+            let mut arr = [0u8; 21];
+            arr.copy_from_slice(&hex_vec);
+            Ok(arr)
+        }
         /// restrict the function to be called by `restricted_caller`
         fn only_callable_by(&self, restricted_caller: AccountId) -> Result<(), Error> {
             if self.env().caller() != restricted_caller {

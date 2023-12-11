@@ -19,7 +19,6 @@ mod d9_burn_manager {
         /// total amount burned across all contracts
         total_amount_burned: Balance,
         node_reward_contract: AccountId,
-        _fallback_contract_node_reward: AccountId,
     }
 
     #[ink(event)]
@@ -46,10 +45,15 @@ mod d9_burn_manager {
     impl D9BurnManager {
         /// Constructor that initializes the `bool` value to the given `init_value`.
         #[ink(constructor, payable)]
-        pub fn new(admin: AccountId, burn_contracts: Vec<AccountId>) -> Self {
+        pub fn new(
+            admin: AccountId,
+            burn_contracts: Vec<AccountId>,
+            node_reward_contract: AccountId
+        ) -> Self {
             Self {
                 admin,
                 burn_contracts,
+                node_reward_contract,
                 portfolios: Default::default(),
                 total_amount_burned: Default::default(),
             }
@@ -202,8 +206,8 @@ mod d9_burn_manager {
         }
 
         #[ink(message)]
-        pub fn node_reward_fallback(&mut self) {
-            self.node_reward_contract = self._fallback_contract_node_reward;
+        pub fn get_balance(&self) -> Balance {
+            self.env().balance()
         }
 
         fn callable_by(&self, account_id: AccountId) -> Result<(), Error> {
@@ -212,6 +216,28 @@ mod d9_burn_manager {
                 return Err(Error::InvalidCaller);
             }
             Ok(())
+        }
+
+        #[ink(message)]
+        pub fn pay_node_reward(
+            &mut self,
+            node_id: AccountId,
+            node_reward: Balance
+        ) -> Result<(), Error> {
+            let check = self.callable_by(self.node_reward_contract);
+            assert!(check.is_ok(), "Invalid caller");
+            let result = self.env().transfer(node_id, node_reward);
+            match result {
+                Ok(_) => Ok(()),
+                Err(_) => Err(Error::TransferFailed),
+            }
+        }
+
+        #[ink(message)]
+        pub fn set_node_reward_contract(&mut self, node_reward_contract: AccountId) {
+            let check = self.callable_by(self.admin);
+            assert!(check.is_ok(), "Invalid caller");
+            self.node_reward_contract = node_reward_contract;
         }
 
         fn execute_burn(

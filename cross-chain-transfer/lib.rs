@@ -39,8 +39,6 @@ mod cross_chain_transfer {
         #[ink(topic)]
         pub tx_id: String,
         #[ink(topic)]
-        pub from_address: [u8; 21],
-        #[ink(topic)]
         pub to_address: AccountId,
         #[ink(topic)]
         pub amount: u128,
@@ -77,7 +75,7 @@ mod cross_chain_transfer {
     #[cfg_attr(feature = "std", derive(scale_info::TypeInfo, ink::storage::traits::StorageLayout))]
     pub enum TransactionType {
         Commit,
-        Transfer,
+        Dispatch,
     }
 
     #[derive(Encode, Decode, Debug, PartialEq, Eq, Copy, Clone)]
@@ -95,6 +93,7 @@ mod cross_chain_transfer {
         UnableToSendUSDT,
         InsufficientAllowance,
         UserUSDTBalanceInsufficient,
+        D9orUSDTProvidedLiquidityAtZero,
     }
 
     impl CrossChainTransfer {
@@ -154,12 +153,7 @@ mod cross_chain_transfer {
             if let Err(e) = caller_check {
                 return Err(e);
             }
-            // to_address to bytes
-            // let to_address_to_bytes_result = self.hex_to_bytes(&to_address);
-            // if let Err(e) = to_address_to_bytes_result {
-            //     return Err(e);
-            // }
-            // let to_address_bytes = to_address_to_bytes_result.unwrap();
+
             if to_address.len() != 21 {
                 return Err(Error::TronAddressInvalidByteLength);
             }
@@ -230,7 +224,7 @@ mod cross_chain_transfer {
 
             let transaction = Transaction {
                 transaction_id: tx_id.clone(),
-                transaction_type: TransactionType::Transfer,
+                transaction_type: TransactionType::Dispatch,
                 from_chain: Chain::TRON,
                 from_address: AddressType::Tron(from_address),
                 to_address: AddressType::D9(to_address),
@@ -246,7 +240,6 @@ mod cross_chain_transfer {
             self.increase_transaction_nonce(to_address);
             self.env().emit_event(DispatchCompleted {
                 tx_id: tx_id.clone(),
-                from_address,
                 to_address,
                 amount,
             });
@@ -386,19 +379,19 @@ mod cross_chain_transfer {
             Ok(())
         }
 
-        fn hex_to_bytes(&self, hex_str: &str) -> Result<[u8; 21], Error> {
-            let hex_decode_result = hex::decode(hex_str);
-            if hex_decode_result.is_err() {
-                return Err(Error::InvalidHexString);
-            }
-            let hex_vec = hex_decode_result.unwrap();
-            if hex_vec.len() != 21 {
-                return Err(Error::DecodedHexLengthInvalid);
-            }
-            let mut arr = [0u8; 21];
-            arr.copy_from_slice(&hex_vec);
-            Ok(arr)
-        }
+        //   fn hex_to_bytes(&self, hex_str: &str) -> Result<[u8; 21], Error> {
+        //       let hex_decode_result = hex::decode(hex_str);
+        //       if hex_decode_result.is_err() {
+        //           return Err(Error::InvalidHexString);
+        //       }
+        //       let hex_vec = hex_decode_result.unwrap();
+        //       if hex_vec.len() != 21 {
+        //           return Err(Error::DecodedHexLengthInvalid);
+        //       }
+        //       let mut arr = [0u8; 21];
+        //       arr.copy_from_slice(&hex_vec);
+        //       Ok(arr)
+        //   }
         /// restrict the function to be called by `restricted_caller`
         fn only_callable_by(&self, restricted_caller: AccountId) -> Result<(), Error> {
             if self.env().caller() != restricted_caller {

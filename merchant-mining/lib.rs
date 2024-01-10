@@ -132,7 +132,7 @@ mod d9_merchant_mining {
         #[ink(constructor)]
         pub fn new(
             amm_contract: AccountId,
-            mining_pool: AccountId,
+            main_contract: AccountId,
             usdt_contract: AccountId
         ) -> Self {
             Self {
@@ -143,7 +143,7 @@ mod d9_merchant_mining {
                 merchant_expiry: Default::default(),
                 accounts: Default::default(),
                 subscription_fee: 1000,
-                milliseconds_day: 600_000,
+                milliseconds_day: 86_400_000,
             }
         }
 
@@ -162,7 +162,7 @@ mod d9_merchant_mining {
             if let Err(e) = receive_usdt_result {
                 return Err(e);
             }
-            let send_usdt_result = self.send_usdt(self.amm_contract, usdt_amount);
+            let send_usdt_result = self.contract_sends_usdt_to(self.amm_contract, usdt_amount);
             if send_usdt_result.is_err() {
                 return Err(Error::SendingUSDTToAMM);
             }
@@ -362,7 +362,7 @@ mod d9_merchant_mining {
         }
 
         #[ink(message, payable)]
-        pub fn pay_merchant_usdt(
+        pub fn send_usdt_payment_to_merchant(
             &mut self,
             merchant_id: AccountId,
             usdt_amount: Balance
@@ -387,7 +387,7 @@ mod d9_merchant_mining {
 
         /// a customer pays a merchant using d9
         #[ink(message, payable)]
-        pub fn pay_merchant_d9(
+        pub fn send_d9_payment_to_merchant(
             &mut self,
             merchant_id: AccountId
         ) -> Result<GreenPointsResult, Error> {
@@ -420,7 +420,7 @@ mod d9_merchant_mining {
             let eighty_four_percent = Perbill::from_rational(84u32, 100u32);
             let merchant_payment = eighty_four_percent.mul_floor(usdt_amount);
 
-            let send_usdt_result = self.send_usdt(merchant_id, merchant_payment);
+            let send_usdt_result = self.contract_sends_usdt_to(merchant_id, merchant_payment);
             if send_usdt_result.is_err() {
                 return Err(Error::SendUSDTToMerchant);
             }
@@ -573,7 +573,11 @@ mod d9_merchant_mining {
             Ok(d9_amount)
         }
 
-        fn send_usdt(&self, recipient: AccountId, amount: Balance) -> Result<(), Error> {
+        fn contract_sends_usdt_to(
+            &self,
+            recipient: AccountId,
+            amount: Balance
+        ) -> Result<(), Error> {
             build_call::<D9Environment>()
                 .call(self.usdt_contract)
                 .gas_limit(0)

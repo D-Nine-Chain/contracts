@@ -1,6 +1,8 @@
 #![cfg_attr(not(feature = "std"), no_std, no_main)]
-use ink::{ env::Environment, prelude::vec::Vec };
+use sp_arithmetic::Perquintill;
+use ink::{ env::Environment, prelude::vec::Vec, primitives::AccountId };
 use scale::{ Decode, Encode };
+// use sp_staking::SessionIndex;
 // use scale_info::TypeInfo;
 #[derive(Debug, Clone, PartialEq, Eq)]
 #[cfg_attr(feature = "std", derive(scale_info::TypeInfo))]
@@ -35,10 +37,24 @@ pub trait D9ChainExtension {
     fn get_validators() -> Result<Vec<<D9Environment as Environment>::AccountId>, RuntimeError>;
 
     #[ink(extension = 3)]
-    fn get_candidates() -> Result<Vec<<D9Environment as Environment>::AccountId>, RuntimeError>;
+    fn get_session_node_list(
+        session_index: u32
+    ) -> Result<Vec<<D9Environment as Environment>::AccountId>, RuntimeError>;
 
     #[ink(extension = 4)]
-    fn get_current_session() -> Result<u32, RuntimeError>;
+    fn get_current_session_index() -> Result<u32, RuntimeError>;
+
+    #[ink(extension = 5)]
+    fn get_user_supported_nodes(user_id: AccountId) -> Result<Vec<AccountId>, RuntimeError>;
+
+    #[ink(extension = 6)]
+    fn get_node_sharing_percentage(node_id: AccountId) -> Result<u8, RuntimeError>;
+
+    #[ink(extension = 7)]
+    fn get_user_vote_ratio_for_candidate(
+        user_id: AccountId,
+        node_id: AccountId
+    ) -> Result<Option<Perquintill>, RuntimeError>;
 }
 
 #[derive(Encode, Decode, Debug, PartialEq, Eq, Copy, Clone)]
@@ -46,19 +62,13 @@ pub trait D9ChainExtension {
 pub enum RuntimeError {
     NoReferralAccountRecord,
     ErrorGettingValidators,
-    ErrorGettingCandidates,
+    ErrorGettingSessionList,
     ErrorGettingSession,
+    ErrorGettingNodesUserSupports,
+    ErrorGettingNodeSharingPercentage,
+    ErrorGettingUserVoteRatioForCandidate,
 }
-// impl TypeInfo for RuntimeError {
-//     type Identity = Self;
 
-//     fn type_info() -> Type {
-//         Type::builder()
-//             .path(Path::new("RuntimeError", module_path!()))
-//             .variant(Variants::new().variant("NoReferralAccountRecord", |v| v.index(0)))
-//             .build()
-//     }
-// }
 impl From<scale::Error> for RuntimeError {
     fn from(_: scale::Error) -> Self {
         panic!("encountered unexpected invalid SCALE encoding")
@@ -71,8 +81,11 @@ impl ink::env::chain_extension::FromStatusCode for RuntimeError {
             0 => Ok(()),
             1 => Err(Self::NoReferralAccountRecord),
             2 => Err(Self::ErrorGettingValidators),
-            3 => Err(Self::ErrorGettingCandidates),
+            3 => Err(Self::ErrorGettingSessionList),
             4 => Err(Self::ErrorGettingSession),
+            5 => Err(Self::ErrorGettingNodesUserSupports),
+            6 => Err(Self::ErrorGettingNodeSharingPercentage),
+            7 => Err(Self::ErrorGettingUserVoteRatioForCandidate),
             _ => panic!("encountered unknown status code"),
         }
     }

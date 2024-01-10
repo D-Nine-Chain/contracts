@@ -14,7 +14,7 @@ pub mod d9_burn_mining {
         ///total amount of tokens burned so far globally
         pub total_amount_burned: Balance,
         /// the controller of this contract
-        burn_manager_contract: AccountId,
+        main_pool: AccountId,
         /// mapping of account ids to account data
         accounts: Mapping<AccountId, Account>,
         ///minimum permissible burn amount
@@ -25,11 +25,11 @@ pub mod d9_burn_mining {
 
     impl D9burnMining {
         #[ink(constructor, payable)]
-        pub fn new(burn_manager_contract: AccountId, burn_minimum: Balance) -> Self {
+        pub fn new(main_pool: AccountId, burn_minimum: Balance) -> Self {
             let day_milliseconds: Timestamp = 600_000;
             Self {
                 total_amount_burned: Default::default(),
-                burn_manager_contract,
+                main_pool,
                 accounts: Default::default(),
                 burn_minimum,
                 day_milliseconds,
@@ -50,11 +50,15 @@ pub mod d9_burn_mining {
             account_id: AccountId,
             burn_amount: Balance
         ) -> Result<Balance, Error> {
-            if self.env().caller() != self.burn_manager_contract {
+            if self.env().caller() != self.main_pool {
                 return Err(Error::RestrictedFunction);
             }
             if burn_amount < self.burn_minimum {
                 return Err(Error::BurnAmountInsufficient);
+            }
+
+            if burn_amount % 100 != 0 {
+                return Err(Error::MustBeMultipleOf100);
             }
 
             let balance_increase = self._burn(account_id, burn_amount);
@@ -93,7 +97,7 @@ pub mod d9_burn_mining {
             &mut self,
             account_id: AccountId
         ) -> Result<(Balance, Timestamp), Error> {
-            if self.env().caller() != self.burn_manager_contract {
+            if self.env().caller() != self.main_pool {
                 return Err(Error::RestrictedFunction);
             }
 

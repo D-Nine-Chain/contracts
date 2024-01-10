@@ -126,4 +126,6 @@ pub enum Error {
     /// then runtime returned an empty Ancestors array. shouldnt happen but just in case
     RuntimeErrorGettingAncestors,
     NoAncestorsFound,
+    MustBeMultipleOf100,
+    RemoteCallToBurnContractFailed,
 }

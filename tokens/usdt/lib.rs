@@ -37,24 +37,24 @@ pub mod d9_usdt {
             _instance
         }
 
-        #[ink(message)]
-        pub fn approve(
-            &mut self,
-            owner: AccountId,
-            spender: AccountId,
-            amount: Balance
-        ) -> Result<(), PSP22Error> {
-            psp22::Internal::_approve_from_to(self, owner, spender, amount)
-        }
+        //   #[ink(message)]
+        //   pub fn approve(
+        //       &mut self,
+        //       owner: AccountId,
+        //       spender: AccountId,
+        //       amount: Balance
+        //   ) -> Result<(), PSP22Error> {
+        //       psp22::Internal::_approve_from_to(self, owner, spender, amount)
+        //   }
 
-        #[ink(message)]
-        pub fn transfer_from(
-            &mut self,
-            from: AccountId,
-            to: AccountId,
-            amount: Balance
-        ) -> Result<(), PSP22Error> {
-            psp22::Internal::_transfer_from_to(self, from, to, amount, [0u8].to_vec())
-        }
+        //   #[ink(message)]
+        //   pub fn transfer_from(
+        //       &mut self,
+        //       from: AccountId,
+        //       to: AccountId,
+        //       amount: Balance
+        //   ) -> Result<(), PSP22Error> {
+        //       psp22::Internal::_transfer_from_to(self, from, to, amount, [0u8].to_vec())
+        //   }
     }
 }

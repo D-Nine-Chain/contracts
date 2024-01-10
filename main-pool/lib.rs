@@ -1,7 +1,7 @@
 #![cfg_attr(not(feature = "std"), no_std, no_main)]
 use d9_burn_common::{ BurnPortfolio, ActionRecord, D9Environment, Error };
 #[ink::contract(env = D9Environment)]
-mod d9_burn_manager {
+mod d9_main_pool {
     use super::*;
     use ink::storage::Mapping;
     use ink::prelude::vec::Vec;
@@ -11,7 +11,7 @@ mod d9_burn_manager {
     /// Add new fields to the below struct in order
     /// to add new static storage fields to your contract.
     #[ink(storage)]
-    pub struct D9BurnManager {
+    pub struct D9MainPool {
         admin: AccountId,
         burn_contracts: Vec<AccountId>,
         /// mapping of accountId and code_hash of logic contract to respective account data
@@ -42,7 +42,7 @@ mod d9_burn_manager {
     }
 
     // /pdate_balance(remainder, last_withdrawal_timestamp, burn_contract);
-    impl D9BurnManager {
+    impl D9MainPool {
         /// Constructor that initializes the `bool` value to the given `init_value`.
         #[ink(constructor, payable)]
         pub fn new(
@@ -59,21 +59,6 @@ mod d9_burn_manager {
             }
         }
 
-        /// Executes a burn by making a cross-contract call, updates the total burned amount,
-        /// updates the user's portfolio, and emits a `BurnExecuted` event.
-        ///
-        /// # Arguments
-        ///
-        /// * `burn_contract` - Account ID of the contract to call for the burn.
-        ///
-        /// # Errors
-        ///
-        /// Returns `Err` if the burn amount is zero, the burn contract is not valid,
-        /// or the cross-contract call fails.
-        ///
-        /// # Returns
-        ///
-        /// Returns `Ok` with the updated portfolio on success.
         #[ink(message, payable)]
         pub fn burn(
             &mut self,
@@ -94,14 +79,11 @@ mod d9_burn_manager {
             }
 
             // Make the cross-contract call
-            let balance_increase = match
-                self.execute_burn(burn_beneficiary, burn_amount, burn_contract)
-            {
-                Ok(balance) => balance,
-                Err(e) => {
-                    return Err(e);
-                } // Handle potential call error
-            };
+            let burn_result = self.call_burn_contract(burn_beneficiary, burn_amount, burn_contract);
+            if burn_result.is_err() {
+                return Err(Error::RemoteCallToBurnContractFailed);
+            }
+            let balance_increase = burn_result.unwrap();
 
             // Update portfolio and total burn
             let last_burn = ActionRecord {
@@ -240,7 +222,7 @@ mod d9_burn_manager {
             self.node_reward_contract = node_reward_contract;
         }
 
-        fn execute_burn(
+        fn call_burn_contract(
             &self,
             account_id: AccountId,
             burn_amount: Balance,
@@ -282,7 +264,7 @@ mod d9_burn_manager {
     #[cfg(test)]
     mod tests {
         /// Imports all the definitions from the outer scope so we can use them here.
-        use super::*;
+        use d9_main_pool::*;
     }
     #[cfg(all(test, feature = "e2e-tests"))]
     mod e2e_tests {
@@ -318,9 +300,7 @@ mod d9_burn_manager {
             // add burn contract to main contract
             let add_burn_contract_call = build_message::<D9BurnManagerRef>(
                 main_contract_address.clone()
-            ).call(|d9_burn_manager|
-                d9_burn_manager.add_burn_contract(burn_contract_address.clone())
-            );
+            ).call(|d9_burn_manager| d9_main_pool.add_burn_contract(burn_contract_address.clone()));
 
             let add_burn_contract_response = client.call(
                 &ink_e2e::alice(),
@@ -332,7 +312,7 @@ mod d9_burn_manager {
             assert!(add_burn_contract_response.is_ok());
 
             let burn_call = build_message::<D9BurnManagerRef>(main_contract_address.clone()).call(
-                |d9_burn_manager| d9_burn_manager.burn(burn_contract_address.clone())
+                |d9_burn_manager| d9_main_pool.burn(burn_contract_address.clone())
             );
             let burn_amount = 500;
             let burn_response = client.call(
@@ -346,7 +326,7 @@ mod d9_burn_manager {
 
             let get_burn_amount_call = build_message::<D9BurnManagerRef>(
                 main_contract_address.clone()
-            ).call(|d9_burn_manager| d9_burn_manager.get_total_burned());
+            ).call(|d9_burn_manager| d9_main_pool.get_total_burned());
 
             let get_burn_amount_response = client.call(
                 &ink_e2e::alice(),
@@ -387,9 +367,7 @@ mod d9_burn_manager {
             // add burn contract to main contract
             let add_burn_contract_call = build_message::<D9BurnManagerRef>(
                 main_contract_address.clone()
-            ).call(|d9_burn_manager|
-                d9_burn_manager.add_burn_contract(burn_contract_address.clone())
-            );
+            ).call(|d9_burn_manager| d9_main_pool.add_burn_contract(burn_contract_address.clone()));
 
             let add_burn_contract_response = client.call(
                 &ink_e2e::alice(),
@@ -401,7 +379,7 @@ mod d9_burn_manager {
             assert!(add_burn_contract_response.is_ok());
 
             let burn_call = build_message::<D9BurnManagerRef>(main_contract_address.clone()).call(
-                |d9_burn_manager| d9_burn_manager.burn(burn_contract_address.clone())
+                |d9_burn_manager| d9_main_pool.burn(burn_contract_address.clone())
             );
             let burn_amount = 500;
             let burn_response = client.call(
@@ -415,7 +393,7 @@ mod d9_burn_manager {
 
             let withdraw_call = build_message::<D9BurnManagerRef>(
                 main_contract_address.clone()
-            ).call(|d9_burn_manager| d9_burn_manager.withdraw(burn_contract_address.clone()));
+            ).call(|d9_burn_manager| d9_main_pool.withdraw(burn_contract_address.clone()));
             let withdraw_response = client.call(&ink_e2e::alice(), withdraw_call, 0, None).await;
             assert!(withdraw_response.is_ok());
             Ok(())

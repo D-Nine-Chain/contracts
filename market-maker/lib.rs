@@ -318,9 +318,10 @@ mod market_maker {
             }
 
             // send usdt
+            let caller = self.env().caller();
             self.send_usdt_to_user(caller, usdt.clone())?;
 
-            Ok((Currency::USDT, usdt))
+            Ok(usdt)
         }
 
         /// mint lp tokens, credit provider account

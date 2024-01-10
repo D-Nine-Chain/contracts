@@ -65,6 +65,9 @@ mod node_reward {
         BeyondQualificationForNodeStatus,
         ErrorIssuingPayment,
         RewardReceivedThisSession,
+        ErrorGettingSessionList,
+        ErrorGettingUserSupportedNodes,
+        UserDoesntSupportAnyNodes,
     }
 
     impl NodeReward {
@@ -86,9 +89,62 @@ mod node_reward {
         }
 
         #[ink(message)]
-        pub fn request_payment(&mut self) -> Result<Balance, Error> {
+        pub fn request_supporter_payment(&mut self) -> Result<Balance, Error> {
+            let supporter_id = self.env().caller();
+            let supported_nodes_result = self
+                .env()
+                .extension()
+                .get_user_supported_nodes(supporter_id);
+
+            if supported_nodes_result.is_err() {
+                return Err(Error::ErrorGettingUserSupportedNodes);
+            }
+            let supported_nodes = supported_nodes_result.unwrap();
+            if supported_nodes.len() == 0 {
+                return Err(Error::UserDoesntSupportAnyNodes);
+            }
+            let payable_nodes = self.determine_payable_user_supported_nodes(supported_nodes);
+            let session_index_result = self.get_payout_session_index();
+            if let Err(e) = session_index_result {
+                return Err(e);
+            }
+            let session_index = session_index_result.unwrap();
+            let session_record_result = self.get_payout_session_record();
+            if let Err(e) = session_record_result {
+                return Err(e);
+            }
+            let (session_index, session_reward) = session_record_result.unwrap();
+            let last_payment_option = self.last_session_payments.get(supporter_id);
+            let last_payment_session = match last_payment_option {
+                Some(last_payment) => last_payment,
+                None => 0,
+            };
+            if last_payment_session == session_index {
+                return Err(Error::RewardReceivedThisSession);
+            }
+
+            let payment_amount = session_reward.standbys / 10;
+
+            let payment_result = self.request_supporter_payment_from_main(
+                supporter_id,
+                payment_amount
+            );
+            if payment_result.is_err() {
+                return Err(Error::ErrorIssuingPayment);
+            }
+
+            Ok(payment_amount)
+        }
+
+        #[ink(message)]
+        pub fn request_node_payment(&mut self) -> Result<Balance, Error> {
             let node_id = self.env().caller();
-            let tier_result = self.determine_node_tier(node_id);
+            let session_index_result = self.get_payout_session_index();
+            if let Err(e) = session_index_result {
+                return Err(e);
+            }
+            let session_index = session_index_result.unwrap();
+            let tier_result = self.determine_node_tier(node_id, session_index);
             if let Err(e) = tier_result {
                 return Err(e);
             }
@@ -104,40 +160,37 @@ mod node_reward {
         }
 
         /// determine the rank of a node
-        fn determine_node_tier(&self, account_id: AccountId) -> Result<NodeTier, Error> {
-            let validators = self.get_validators();
-            let candidates = self.get_candidates();
+        fn determine_node_tier(
+            &self,
+            account_id: AccountId,
+            session_index: u32
+        ) -> Result<NodeTier, Error> {
+            let session_list_result: Result<Vec<AccountId>, _> = self
+                .env()
+                .extension()
+                .get_session_node_list(session_index);
+            if session_list_result.is_err() {
+                return Err(Error::ErrorGettingSessionList);
+            }
+            let session_list = session_list_result.unwrap();
 
-            if validators.contains(&account_id) {
-                match validators.iter().position(|&x| x == account_id) {
-                    Some(index) => {
-                        if (0..9).contains(&index) {
-                            Ok(NodeTier::Super(SuperNodeSubTier::Upper))
-                        } else if (10..18).contains(&index) {
-                            Ok(NodeTier::Super(SuperNodeSubTier::Middle))
-                        } else if (19..27).contains(&index) {
-                            Ok(NodeTier::Super(SuperNodeSubTier::Lower))
-                        } else {
-                            Err(Error::BeyondQualificationForNodeStatus)
-                        }
+            match session_list.iter().position(|&x| x == account_id) {
+                Some(index) => {
+                    if (0..8).contains(&index) {
+                        Ok(NodeTier::Super(SuperNodeSubTier::Upper))
+                    } else if (9..17).contains(&index) {
+                        Ok(NodeTier::Super(SuperNodeSubTier::Middle))
+                    } else if (18..26).contains(&index) {
+                        Ok(NodeTier::Super(SuperNodeSubTier::Lower))
+                    } else if (27..126).contains(&index) {
+                        Ok(NodeTier::StandBy)
+                    } else if (127..287).contains(&index) {
+                        Ok(NodeTier::Candidate)
+                    } else {
+                        Err(Error::BeyondQualificationForNodeStatus)
                     }
-                    None => Err(Error::NotAValidNode),
                 }
-            } else if candidates.contains(&account_id) {
-                match candidates.iter().position(|&x| x == account_id) {
-                    Some(index) => {
-                        if (0..99).contains(&index) {
-                            Ok(NodeTier::StandBy)
-                        } else if (100..260).contains(&index) {
-                            Ok(NodeTier::Candidate)
-                        } else {
-                            Err(Error::NotASuperNode)
-                        }
-                    }
-                    None => Err(Error::NotASuperNode),
-                }
-            } else {
-                Err(Error::NotAValidNode)
+                None => Err(Error::NotAValidNode),
             }
         }
 
@@ -175,6 +228,11 @@ mod node_reward {
             Ok(payment_amount)
         }
 
+        fn determine_payable_user_supported_nodes(
+            &self,
+            supported_nodes: Vec<AccountId>
+        ) -> Vec<AccountId> {}
+
         fn request_payment_from_main(
             &self,
             node_id: AccountId,
@@ -186,6 +244,23 @@ mod node_reward {
                 .exec_input(
                     ExecutionInput::new(Selector::new(selector_bytes!("pay_node_reward")))
                         .push_arg(node_id)
+                        .push_arg(payment_amount)
+                )
+                .returns::<Result<(), Error>>()
+                .invoke()
+        }
+
+        fn request_supporter_payment_from_main(
+            &self,
+            supporter_id: AccountId,
+            payment_amount: Balance
+        ) {
+            build_call::<D9Environment>()
+                .call(self.main)
+                .gas_limit(0)
+                .exec_input(
+                    ExecutionInput::new(Selector::new(selector_bytes!("pay_supporter_reward")))
+                        .push_arg(supporter_id)
                         .push_arg(payment_amount)
                 )
                 .returns::<Result<(), Error>>()
@@ -210,7 +285,7 @@ mod node_reward {
         }
 
         fn get_payout_session_record(&self) -> Result<(u32, SessionReward), Error> {
-            let session_index_result = self.get_payout_session();
+            let session_index_result = self.get_payout_session_index();
             if let Err(e) = session_index_result {
                 return Err(e);
             }
@@ -237,8 +312,8 @@ mod node_reward {
             Ok((session_index, session_reward))
         }
 
-        fn get_payout_session(&self) -> Result<u32, Error> {
-            let session_result = self.env().extension().get_current_session();
+        fn get_payout_session_index(&self) -> Result<u32, Error> {
+            let session_result = self.env().extension().get_current_session_index();
             if session_result.is_err() {
                 return Err(Error::ErrorGettingSession);
             }
@@ -259,24 +334,6 @@ mod node_reward {
                 .exec_input(ExecutionInput::new(Selector::new(ink::selector_bytes!("get_balance"))))
                 .returns::<Balance>()
                 .invoke()
-        }
-
-        fn get_validators(&self) -> Vec<AccountId> {
-            let validators_result = self.env().extension().get_validators();
-            let validators = match validators_result {
-                Ok(validators) => validators,
-                Err(_) => Vec::new(),
-            };
-            validators
-        }
-
-        fn get_candidates(&self) -> Vec<AccountId> {
-            let candidates = self.env().extension().get_candidates();
-            let candidates = match candidates {
-                Ok(candidates) => candidates,
-                Err(_) => Vec::new(),
-            };
-            candidates
         }
     }
 

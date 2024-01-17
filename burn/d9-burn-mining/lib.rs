@@ -21,19 +21,30 @@ pub mod d9_burn_mining {
         pub burn_minimum: Balance,
         /// set it here to easily adjust for testing for unit, e2e tests and test network
         pub day_milliseconds: Timestamp,
+        pub admin: AccountId,
     }
 
     impl D9burnMining {
         #[ink(constructor, payable)]
         pub fn new(main_pool: AccountId, burn_minimum: Balance) -> Self {
-            let day_milliseconds: Timestamp = 600_000;
+            let day_milliseconds: Timestamp = 86_400_000;
             Self {
                 total_amount_burned: Default::default(),
                 main_pool,
                 accounts: Default::default(),
                 burn_minimum,
                 day_milliseconds,
+                admin: Self::env().caller(),
             }
+        }
+
+        #[ink(message)]
+        pub fn change_main(&mut self, new_main: AccountId) -> Result<(), Error> {
+            if self.env().caller() != self.admin {
+                return Err(Error::RestrictedFunction);
+            }
+            self.main_pool = new_main;
+            Ok(())
         }
 
         #[ink(message)]
@@ -237,7 +248,7 @@ pub mod d9_burn_mining {
     mod tests {
         /// Imports all the definitions from the outer scope so we can use them here.
         use super::*;
-        use ink::env::{ block_timestamp };
+        use ink::env::block_timestamp;
         fn set_block_time(init_time: Timestamp) {
             ink::env::test::set_block_timestamp::<ink::env::DefaultEnvironment>(init_time);
             ink::env::test::advance_block::<ink::env::DefaultEnvironment>();

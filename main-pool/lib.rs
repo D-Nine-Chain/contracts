@@ -19,6 +19,7 @@ mod d9_main_pool {
         /// total amount burned across all contracts
         total_amount_burned: Balance,
         node_reward_contract: AccountId,
+        mining_pool: AccountId,
     }
 
     #[ink(event)]
@@ -48,7 +49,8 @@ mod d9_main_pool {
         pub fn new(
             admin: AccountId,
             burn_contracts: Vec<AccountId>,
-            node_reward_contract: AccountId
+            node_reward_contract: AccountId,
+            mining_pool: AccountId
         ) -> Self {
             Self {
                 admin,
@@ -56,7 +58,14 @@ mod d9_main_pool {
                 node_reward_contract,
                 portfolios: Default::default(),
                 total_amount_burned: Default::default(),
+                mining_pool,
             }
+        }
+        #[ink(message)]
+        pub fn set_mining_pool(&mut self, mining_pool: AccountId) {
+            let check = self.callable_by(self.admin);
+            assert!(check.is_ok(), "Invalid caller");
+            self.mining_pool = mining_pool;
         }
 
         #[ink(message, payable)]
@@ -109,6 +118,10 @@ mod d9_main_pool {
                 amount: burn_amount,
             });
             self.portfolios.insert(burn_beneficiary, &portfolio);
+            let call_result = self.call_mining_pool_to_process_burn(burn_amount);
+            if call_result.is_err() {
+                return Err(Error::RemoteCallToMiningPoolFailed);
+            }
             Ok(portfolio.clone()) // clone for returning; original is in the map
         }
 
@@ -136,11 +149,7 @@ mod d9_main_pool {
             // If no ancestors are found or payment fails, process withdrawal normally
             portfolio.update_balance(withdraw_allowance, this_withdrawal_timestamp, burn_contract);
             self.portfolios.insert(account_id, &portfolio);
-
-            self
-                .env()
-                .transfer(account_id, withdraw_allowance)
-                .map_err(|_| Error::TransferFailed)?;
+            self.tell_mining_pool_to_send_dividend(account_id, withdraw_allowance)?;
             Ok(portfolio.clone())
         }
 
@@ -237,6 +246,38 @@ mod d9_main_pool {
                         .push_arg(burn_amount)
                 )
                 .returns::<Result<Balance, Error>>()
+                .invoke()
+        }
+
+        fn call_mining_pool_to_process_burn(&self, amount: Balance) -> Result<(), Error> {
+            build_call::<D9Environment>()
+                .call(self.mining_pool)
+                .gas_limit(0) // replace with an appropriate gas limit
+                .transferred_value(amount)
+                .exec_input(
+                    ExecutionInput::new(Selector::new(ink::selector_bytes!("process_burn_payment")))
+                )
+                .returns::<Result<(), Error>>()
+                .invoke()
+        }
+
+        fn tell_mining_pool_to_send_dividend(
+            &self,
+            user_id: AccountId,
+            amount: Balance
+        ) -> Result<(), Error> {
+            build_call::<D9Environment>()
+                .call(self.mining_pool)
+                .gas_limit(0) // replace with an appropriate gas limit
+                .transferred_value(amount)
+                .exec_input(
+                    ExecutionInput::new(
+                        Selector::new(ink::selector_bytes!("request_burn_dividend"))
+                    )
+                        .push_arg(user_id)
+                        .push_arg(amount)
+                )
+                .returns::<Result<(), Error>>()
                 .invoke()
         }
 

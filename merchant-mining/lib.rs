@@ -10,6 +10,7 @@ mod d9_merchant_mining {
     use sp_arithmetic::Perbill;
     use ink::prelude::vec::Vec;
     use ink::env::call::{ build_call, ExecutionInput, Selector };
+    use ink::env::Error as EnvError;
     use ink::selector_bytes;
 
     #[ink(storage)]
@@ -21,7 +22,7 @@ mod d9_merchant_mining {
         subscription_fee: Balance,
         usdt_contract: AccountId,
         amm_contract: AccountId,
-        main_contract: AccountId,
+        mining_pool: AccountId,
         milliseconds_day: Timestamp,
         admin: AccountId,
     }
@@ -101,6 +102,43 @@ mod d9_merchant_mining {
         SendingUSDTToAMM,
         GettingUSDTFromAMM,
         RedeemD9TransferFailed,
+        SomeEnvironmentError,
+        CalledContractTrapped,
+        CalledContractReverted,
+        NotCallable,
+        SomeDecodeError,
+        SomeOffChainError,
+        CalleeTrapped,
+        CalleeReverted,
+        KeyNotFound,
+        _BelowSubsistenceThreshold,
+        TransferFailed,
+        _EndowmentTooLow,
+        CodeNotFound,
+        Unknown,
+        LoggingDisabled,
+        CallRuntimeFailed,
+        EcdsaRecoveryFailed,
+    }
+
+    impl From<EnvError> for Error {
+        fn from(error: EnvError) -> Self {
+            match error {
+                EnvError::CalleeTrapped => Self::CalledContractTrapped,
+                EnvError::CalleeReverted => Self::CalledContractReverted,
+                EnvError::NotCallable => Self::NotCallable,
+                EnvError::KeyNotFound => Self::KeyNotFound,
+                EnvError::_BelowSubsistenceThreshold => Self::_BelowSubsistenceThreshold,
+                EnvError::TransferFailed => Self::TransferFailed,
+                EnvError::_EndowmentTooLow => Self::_EndowmentTooLow,
+                EnvError::CodeNotFound => Self::CodeNotFound,
+                EnvError::Unknown => Self::Unknown,
+                EnvError::LoggingDisabled => Self::LoggingDisabled,
+                EnvError::CallRuntimeFailed => Self::CallRuntimeFailed,
+                EnvError::EcdsaRecoveryFailed => Self::EcdsaRecoveryFailed,
+                _ => Self::SomeEnvironmentError,
+            }
+        }
     }
 
     #[ink(event)]
@@ -132,21 +170,21 @@ mod d9_merchant_mining {
         #[ink(constructor)]
         pub fn new(
             amm_contract: AccountId,
-            main_contract: AccountId,
+            mining_pool: AccountId,
             usdt_contract: AccountId
         ) -> Self {
             Self {
                 admin: Self::env().caller(),
                 amm_contract,
                 usdt_contract,
-                main_contract,
+                mining_pool,
                 merchant_expiry: Default::default(),
                 accounts: Default::default(),
                 subscription_fee: 1000,
                 milliseconds_day: 86_400_000,
             }
         }
-
+        // old main xssaidD9aqTCqsbLn1ncF2gtZyr4MreBXzXT8fquLZfcMrB
         /// create merchant account subscription
         #[ink(message)]
         pub fn subscribe(&mut self, usdt_amount: Balance) -> Result<Timestamp, Error> {
@@ -267,8 +305,8 @@ mod d9_merchant_mining {
             user_account: AccountId,
             redeemable_usdt: Balance
         ) -> Result<Balance, Error> {
-            build_call::<D9Environment>()
-                .call(self.main_contract)
+            let result = build_call::<D9Environment>()
+                .call(self.mining_pool)
                 .gas_limit(0)
                 .exec_input(
                     ExecutionInput::new(Selector::new(selector_bytes!("merchant_user_redeem_d9")))
@@ -276,7 +314,8 @@ mod d9_merchant_mining {
                         .push_arg(redeemable_usdt)
                 )
                 .returns::<Result<Balance, Error>>()
-                .invoke()
+                .try_invoke()?;
+            result.unwrap()
         }
 
         #[ink(message)]
@@ -286,18 +325,9 @@ mod d9_merchant_mining {
             usdt_payment: Balance
         ) -> Result<GreenPointsResult, Error> {
             let merchant_id: AccountId = self.env().caller();
-            let validate_merchant = self.validate_merchant(merchant_id);
-            if let Err(e) = validate_merchant {
-                return Err(e);
-            }
-            let check_usdt = self.validate_usdt_transfer(merchant_id, usdt_payment);
-            if let Err(e) = check_usdt {
-                return Err(e);
-            }
-            let receive_usdt_result = self.receive_usdt_from_user(merchant_id, usdt_payment);
-            if receive_usdt_result.is_err() {
-                return Err(Error::ReceivingUSDTFromUser);
-            }
+            let _ = self.validate_merchant(merchant_id)?;
+            let _ = self.validate_usdt_transfer(merchant_id, usdt_payment)?;
+            let _ = self.receive_usdt_from_user(merchant_id, usdt_payment)?;
 
             // calculate green points
             let usdt_amount_to_green = usdt_payment.saturating_mul(100).saturating_div(16);
@@ -317,10 +347,10 @@ mod d9_merchant_mining {
 
             // send to mining pool
             let d9_amount = conversion_result.unwrap();
-            let to_main_result = self.send_to_main(d9_amount);
-            if to_main_result.is_err() {
-                return Err(Error::SendingD9ToMiningPool);
-            }
+            let _ = self.call_mining_pool_to_process(d9_amount)?;
+            // if mining_pool_process_result.is_err() {
+            //     return Err(Error::SendingD9ToMiningPool);
+            // }
 
             //emit event
             self.env().emit_event(GreenPointsTransaction {
@@ -368,19 +398,9 @@ mod d9_merchant_mining {
             usdt_amount: Balance
         ) -> Result<GreenPointsResult, Error> {
             let consumer_id = self.env().caller();
-            let validate_merchant = self.validate_merchant(merchant_id);
-            if let Err(e) = validate_merchant {
-                return Err(e);
-            }
-            //check usdt transfer
-            let validate_result = self.validate_usdt_transfer(consumer_id, usdt_amount);
-            if let Err(e) = validate_result {
-                return Err(e);
-            }
-            let receive_usdt_result = self.receive_usdt_from_user(consumer_id, usdt_amount);
-            if receive_usdt_result.is_err() {
-                return Err(Error::ReceivingUSDTFromUser);
-            }
+            let _ = self.validate_merchant(merchant_id)?;
+            let _ = self.validate_usdt_transfer(consumer_id, usdt_amount)?;
+            let _ = self.receive_usdt_from_user(consumer_id, usdt_amount);
 
             self.finish_processing_payment(consumer_id, merchant_id, usdt_amount)
         }
@@ -441,10 +461,10 @@ mod d9_merchant_mining {
             let d9_amount = conversion_result.unwrap();
 
             //send to mining pool
-            let main_transfer_result = self.send_to_main(d9_amount);
-            if main_transfer_result.is_err() {
-                return Err(Error::SendingD9ToMiningPool);
-            }
+            let _ = self.call_mining_pool_to_process(d9_amount)?;
+            // if main_transfer_result.is_err() {
+            //     return Err(Error::SendingD9ToMiningPool);
+            // }
 
             self.env().emit_event(GreenPointsTransaction {
                 merchant: GreenPointsCreated {
@@ -488,9 +508,20 @@ mod d9_merchant_mining {
         #[ink(message)]
         pub fn change_mining_pool(&mut self, new_mining_pool: AccountId) -> Result<(), Error> {
             self.only_admin()?;
-            self.main_contract = new_mining_pool;
+            self.mining_pool = new_mining_pool;
             Ok(())
         }
+
+        //   #[ink(message)]
+        //   pub fn set_code(&mut self, code_hash: [u8; 32]) {
+        //       self.only_admin()?;
+        //       ink::env
+        //           ::set_code_hash(&code_hash)
+        //           .unwrap_or_else(|err| {
+        //               panic!("Failed to `set_code_hash` to {:?} due to {:?}", code_hash, err)
+        //           });
+        //       ink::env::debug_println!("Switched code hash to {:?}.", code_hash);
+        //   }
 
         fn validate_usdt_transfer(&self, account: AccountId, amount: Balance) -> Result<(), Error> {
             let check_balance_result = self.validate_usdt_balance(account, amount);
@@ -564,11 +595,11 @@ mod d9_merchant_mining {
             if grant_allowance_result.is_err() {
                 return Err(Error::GrantingAllowanceFailed);
             }
-            let conversion_result = self.amm_get_d9(amount);
-            if conversion_result.is_err() {
-                return Err(Error::AMMConversionFailed);
-            }
-            let d9_amount = conversion_result.unwrap();
+            let d9_amount = self.amm_get_d9(amount)?;
+            // if conversion_result.is_err() {
+            //     return Err(Error::AMMConversionFailed);
+            // }
+            // let d9_amount = conversion_result.unwrap();
 
             Ok(d9_amount)
         }
@@ -611,7 +642,7 @@ mod d9_merchant_mining {
         }
 
         fn grant_amm_allowance(&mut self, amount: Balance) -> Result<(), Error> {
-            build_call::<D9Environment>()
+            let call_result = build_call::<D9Environment>()
                 .call(self.usdt_contract)
                 .gas_limit(0)
                 .exec_input(
@@ -620,31 +651,34 @@ mod d9_merchant_mining {
                         .push_arg(amount)
                 )
                 .returns::<Result<(), Error>>()
-                .invoke()
+                .try_invoke()?;
+            call_result.unwrap()
         }
 
         ///convert received usdt to d9 which will go to mining pool
         fn amm_get_d9(&self, amount: Balance) -> Result<Balance, Error> {
-            build_call::<D9Environment>()
+            let call_result = build_call::<D9Environment>()
                 .call(self.amm_contract)
                 .gas_limit(0)
                 .exec_input(
                     ExecutionInput::new(Selector::new(selector_bytes!("get_d9"))).push_arg(amount)
                 )
                 .returns::<Result<Balance, Error>>()
-                .invoke()
+                .try_invoke()?;
+            call_result.unwrap()
         }
 
         /// call amm contract to get usdt, which will go to merchant
 
         fn convert_to_usdt(&self, amount: Balance) -> Result<Balance, Error> {
-            build_call::<D9Environment>()
+            let result = build_call::<D9Environment>()
                 .call(self.amm_contract)
                 .gas_limit(0)
                 .transferred_value(amount)
                 .exec_input(ExecutionInput::new(Selector::new(selector_bytes!("get_usdt"))))
                 .returns::<Result<Balance, Error>>()
-                .invoke()
+                .try_invoke()?;
+            result.unwrap()
         }
 
         /// function to restrict access to admin
@@ -716,9 +750,9 @@ mod d9_merchant_mining {
         }
 
         /// send some amount to the mining pool
-        fn send_to_main(&self, amount: Balance) -> Result<(), Error> {
-            build_call::<D9Environment>()
-                .call(self.main_contract)
+        fn call_mining_pool_to_process(&self, amount: Balance) -> Result<(), Error> {
+            let _ = build_call::<D9Environment>()
+                .call(self.mining_pool)
                 .gas_limit(0) // replace with an appropriate gas limit
                 .transferred_value(amount)
                 .exec_input(
@@ -727,7 +761,8 @@ mod d9_merchant_mining {
                     )
                 )
                 .returns::<Result<(), Error>>()
-                .invoke()
+                .try_invoke()?;
+            Ok(())
         }
 
         pub fn get_ancestors(&self, account_id: AccountId) -> Option<Vec<AccountId>> {

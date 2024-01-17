@@ -56,8 +56,8 @@ mod mining_pool {
         }
 
         #[ink(message, payable)]
-        pub fn process_merchant_payment(&self) -> Result<(), Error> {
-            let valid_caller = self.only_callable_by(self.merchant_contract);
+        pub fn process_burn_payment(&self) -> Result<(), Error> {
+            let valid_caller = self.only_callable_by(self.main_contract);
             if let Err(e) = valid_caller {
                 return Err(e);
             }
@@ -68,16 +68,46 @@ mod mining_pool {
             Ok(())
         }
 
+        #[ink(message, payable)]
+        pub fn request_burn_dividend(
+            &self,
+            user_id: AccountId,
+            amount: Balance
+        ) -> Result<(), Error> {
+            let valid_caller = self.only_callable_by(self.main_contract);
+
+            if let Err(e) = valid_caller {
+                return Err(e);
+            }
+
+            let payment_result = self.env().transfer(user_id, amount);
+            if payment_result.is_err() {
+                return Err(Error::FailedToTransferD9ToUser);
+            }
+            Ok(())
+        }
+
+        #[ink(message, payable)]
+        pub fn process_merchant_payment(&self) -> Result<(), Error> {
+            let valid_caller = self.only_callable_by(self.merchant_contract)?;
+            let received_amount = self.env().transferred_value();
+            let three_percent = Perbill::from_percent(3);
+            let amount_to_node_reward = three_percent.mul_floor(received_amount);
+            let payment_result = self.env().transfer(self.node_reward_pool, amount_to_node_reward);
+            if payment_result.is_err() {
+                return Err(Error::FailedToTransferD9ToUser);
+            }
+            Ok(())
+        }
+
         #[ink(message)]
         pub fn merchant_user_redeem_d9(
             &self,
             user_account: AccountId,
             redeemable_usdt: Balance
         ) -> Result<Balance, Error> {
-            // let valid_caller = self.only_callable_by(self.merchant_contract);
-            // if let Err(e) = valid_caller {
-            //     return Err(e);
-            // }
+            let valid_caller = self.only_callable_by(self.merchant_contract)?;
+
             let amount_request = self.get_exchange_amount(
                 Direction(Currency::USDT, Currency::D9),
                 redeemable_usdt
@@ -160,12 +190,6 @@ mod mining_pool {
         /// Imports all the definitions from the outer scope so we can use them here.
         use super::*;
 
-        /// We test if the default constructor does its job.
-        #[ink::test]
-        fn default_works() {
-            let mining_pool = MiningPool::default();
-            assert_eq!(mining_pool.get(), false);
-        }
         //   #[ink::test]
         //   fn it_works() {
         //       let mut mining_pool = MiningPool::new(false);

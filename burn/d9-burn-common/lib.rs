@@ -1,6 +1,5 @@
 #![cfg_attr(not(feature = "std"), no_std, no_main)]
-// use std::env;
-
+use ink::env::Error as EnvError;
 use scale::{ Decode, Encode };
 pub use d9_chain_extension::D9Environment;
 type AccountId = <D9Environment as ink::env::Environment>::AccountId;
@@ -128,4 +127,42 @@ pub enum Error {
     NoAncestorsFound,
     MustBeMultipleOf100,
     RemoteCallToBurnContractFailed,
+    RemoteCallToMiningPoolFailed,
+    SomeEnvironmentError,
+    CalledContractTrapped,
+    CalledContractReverted,
+    NotCallable,
+    SomeDecodeError,
+    SomeOffChainError,
+    CalleeTrapped,
+    CalleeReverted,
+    KeyNotFound,
+    _BelowSubsistenceThreshold,
+    EnvironmentalTransferFailed,
+    _EndowmentTooLow,
+    CodeNotFound,
+    Unknown,
+    LoggingDisabled,
+    CallRuntimeFailed,
+    EcdsaRecoveryFailed,
+}
+
+impl From<EnvError> for Error {
+    fn from(error: EnvError) -> Self {
+        match error {
+            EnvError::CalleeTrapped => Self::CalledContractTrapped,
+            EnvError::CalleeReverted => Self::CalledContractReverted,
+            EnvError::NotCallable => Self::NotCallable,
+            EnvError::KeyNotFound => Self::KeyNotFound,
+            EnvError::_BelowSubsistenceThreshold => Self::_BelowSubsistenceThreshold,
+            EnvError::TransferFailed => Self::EnvironmentalTransferFailed,
+            EnvError::_EndowmentTooLow => Self::_EndowmentTooLow,
+            EnvError::CodeNotFound => Self::CodeNotFound,
+            EnvError::Unknown => Self::Unknown,
+            EnvError::LoggingDisabled => Self::LoggingDisabled,
+            EnvError::CallRuntimeFailed => Self::CallRuntimeFailed,
+            EnvError::EcdsaRecoveryFailed => Self::EcdsaRecoveryFailed,
+            _ => Self::SomeEnvironmentError,
+        }
+    }
 }

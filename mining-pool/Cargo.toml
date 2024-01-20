@@ -14,6 +14,7 @@ scale = { package = "parity-scale-codec", version = "3.6.5", default-features = 
 scale-info = { version = "2.10.0", default-features = false, features = [
    "derive",
 ], optional = true }
+substrate-fixed = { default-features = false, git = "https://github.com/encointer/substrate-fixed" }
 
 [dev-dependencies]
 ink_e2e = "4.2.0"
@@ -29,6 +30,7 @@ std = [
    "scale-info/std",
    "sp-arithmetic/std",
    "d9-chain-extension/std",
+   "substrate-fixed/std",
 ]
 ink-as-dependency = []
 e2e-tests = []

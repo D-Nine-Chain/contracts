@@ -7,7 +7,7 @@ use d9_burn_common::{ Account, D9Environment, Error };
 pub mod d9_burn_mining {
     use super::*;
     use ink::storage::Mapping;
-    use sp_arithmetic::{ Rounding::NearestPrefDown, Rounding::NearestPrefUp, Perbill };
+    use sp_arithmetic::Perbill;
     use ink::prelude::vec::Vec;
     #[ink(storage)]
     pub struct D9burnMining {
@@ -150,6 +150,22 @@ pub mod d9_burn_mining {
                 Ok(ancestors) => ancestors,
                 Err(_) => None,
             }
+        }
+
+        /// Modifies the code which is used to execute calls to this contract address (`AccountId`).
+        ///
+        /// We use this to upgrade the contract logic. We don't do any authorization here, any caller
+        /// can execute this method. In a production contract you would do some authorization here.
+        #[ink(message)]
+        pub fn set_code(&mut self, code_hash: [u8; 32]) {
+            let caller = self.env().caller();
+            assert!(caller == self.admin, "Only admin can set code hash.");
+            ink::env
+                ::set_code_hash(&code_hash)
+                .unwrap_or_else(|err| {
+                    panic!("Failed to `set_code_hash` to {:?} due to {:?}", code_hash, err)
+                });
+            ink::env::debug_println!("Switched code hash to {:?}.", code_hash);
         }
 
         /// Calculates the allowed withdrawal amount for an account.

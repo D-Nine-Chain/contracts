@@ -19,7 +19,7 @@ sp-arithmetic = { version = "19", default-features = false }
 scale-info = { version = "2.10.0", default-features = false, features = [
    "derive",
 ], optional = true }
-
+substrate-fixed = { default-features = false, git = "https://github.com/encointer/substrate-fixed" }
 [dev-dependencies]
 ink_e2e = "4.2.0"
 mining_pool = { version = "0.1.0", path = "../mining-pool", default-features = false }
@@ -28,6 +28,12 @@ path = "lib.rs"
 
 [features]
 default = ["std"]
-std = ["ink/std", "scale/std", "scale-info/std", "d9-chain-extension/std"]
+std = [
+   "ink/std",
+   "scale/std",
+   "scale-info/std",
+   "d9-chain-extension/std",
+   "substrate-fixed/std",
+]
 ink-as-dependency = []
 e2e-tests = []

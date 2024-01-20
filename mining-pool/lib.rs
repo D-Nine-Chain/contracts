@@ -6,9 +6,10 @@ pub use d9_chain_extension::D9Environment;
 mod mining_pool {
     use super::*;
     use scale::{ Decode, Encode };
-    use sp_arithmetic::Perbill;
     use ink::env::call::{ build_call, ExecutionInput, Selector };
     use ink::selector_bytes;
+    use substrate_fixed::{ FixedU128, types::extra::U12 };
+    type FixedBalance = FixedU128<U12>;
 
     #[derive(Encode, Decode, Debug, PartialEq, Eq, Copy, Clone)]
     #[cfg_attr(feature = "std", derive(scale_info::TypeInfo))]
@@ -62,8 +63,10 @@ mod mining_pool {
                 return Err(e);
             }
             let received_amount = self.env().transferred_value();
-            let three_percent = Perbill::from_percent(3);
-            let amount_to_pool = three_percent.mul_floor(received_amount);
+            let three_percent_fixed = FixedBalance::from_num(3)
+                .checked_div(FixedBalance::from_num(100))
+                .unwrap();
+            let amount_to_pool = three_percent_fixed.saturating_mul_int(received_amount).to_num();
             let _ = self.env().transfer(self.node_reward_pool, amount_to_pool);
             Ok(())
         }
@@ -89,10 +92,14 @@ mod mining_pool {
 
         #[ink(message, payable)]
         pub fn process_merchant_payment(&self) -> Result<(), Error> {
-            let valid_caller = self.only_callable_by(self.merchant_contract)?;
+            let _ = self.only_callable_by(self.merchant_contract)?;
             let received_amount = self.env().transferred_value();
-            let three_percent = Perbill::from_percent(3);
-            let amount_to_node_reward = three_percent.mul_floor(received_amount);
+            let three_percent_fixed = FixedBalance::from_num(3)
+                .checked_div(FixedBalance::from_num(100))
+                .unwrap();
+            let amount_to_node_reward = three_percent_fixed
+                .saturating_mul_int(received_amount)
+                .to_num();
             let payment_result = self.env().transfer(self.node_reward_pool, amount_to_node_reward);
             if payment_result.is_err() {
                 return Err(Error::FailedToTransferD9ToUser);
@@ -106,7 +113,7 @@ mod mining_pool {
             user_account: AccountId,
             redeemable_usdt: Balance
         ) -> Result<Balance, Error> {
-            let valid_caller = self.only_callable_by(self.merchant_contract)?;
+            let _ = self.only_callable_by(self.merchant_contract)?;
 
             let amount_request = self.get_exchange_amount(
                 Direction(Currency::USDT, Currency::D9),
@@ -172,7 +179,21 @@ mod mining_pool {
             self.main_contract = main_contract;
             Ok(())
         }
-
+        /// Modifies the code which is used to execute calls to this contract address (`AccountId`).
+        ///
+        /// We use this to upgrade the contract logic. We don't do any authorization here, any caller
+        /// can execute this method. In a production contract you would do some authorization here.
+        #[ink(message)]
+        pub fn set_code(&mut self, code_hash: [u8; 32]) {
+            let caller = self.env().caller();
+            assert!(caller == self.admin, "Only admin can set code hash.");
+            ink::env
+                ::set_code_hash(&code_hash)
+                .unwrap_or_else(|err| {
+                    panic!("Failed to `set_code_hash` to {:?} due to {:?}", code_hash, err)
+                });
+            ink::env::debug_println!("Switched code hash to {:?}.", code_hash);
+        }
         fn only_callable_by(&self, account_id: AccountId) -> Result<(), Error> {
             let caller = self.env().caller();
             if caller != account_id {

@@ -24,6 +24,7 @@ mod market_maker {
         liquidity_providers: Mapping<AccountId, Balance>,
         /// total number of liquidity pool tokens
         total_lp_tokens: Balance,
+        admin: AccountId,
     }
 
     #[derive(Encode, Decode, Debug, PartialEq, Eq, Copy, Clone)]
@@ -79,10 +80,11 @@ mod market_maker {
             liquidity_tolerance_percent: u32
         ) -> Self {
             assert!(
-                0 < liquidity_tolerance_percent && liquidity_tolerance_percent <= 100,
-                "tolerance must be 0 < x <= 100"
+                0 <= liquidity_tolerance_percent && liquidity_tolerance_percent <= 100,
+                "tolerance must be 0 <= x <= 100"
             );
             Self {
+                admin: Self::env().caller(),
                 usdt_contract,
                 fee_percent,
                 fee_total: Default::default(),
@@ -90,6 +92,12 @@ mod market_maker {
                 liquidity_providers: Default::default(),
                 total_lp_tokens: Default::default(),
             }
+        }
+
+        #[ink(message)]
+        pub fn change_admin(&mut self, new_admin: AccountId) {
+            assert!(self.env().caller() == self.admin, "Only admin can change admin.");
+            self.admin = new_admin;
         }
 
         /// get pool balances (d9, usdt)
@@ -122,10 +130,10 @@ mod market_maker {
                 //  }
             }
 
-            let validity_check = self.usdt_validity_check(caller, usdt_liquidity);
-            if let Err(e) = validity_check {
-                return Err(e);
-            }
+            // let validity_check = self.usdt_validity_check(caller, usdt_liquidity);
+            // if let Err(e) = validity_check {
+            //     return Err(e);
+            // }
 
             // receive usdt from user
             let receive_usdt_result = self.receive_usdt_from_user(caller, usdt_liquidity);
@@ -183,7 +191,21 @@ mod market_maker {
 
             Ok(())
         }
-
+        /// Modifies the code which is used to execute calls to this contract address (`AccountId`).
+        ///
+        /// We use this to upgrade the contract logic. We don't do any authorization here, any caller
+        /// can execute this method. In a production contract you would do some authorization here.
+        #[ink(message)]
+        pub fn set_code(&mut self, code_hash: [u8; 32]) {
+            let caller = self.env().caller();
+            assert!(caller == self.admin, "Only admin can set code hash.");
+            ink::env
+                ::set_code_hash(&code_hash)
+                .unwrap_or_else(|err| {
+                    panic!("Failed to `set_code_hash` to {:?} due to {:?}", code_hash, err)
+                });
+            ink::env::debug_println!("Switched code hash to {:?}.", code_hash);
+        }
         fn calculate_lp_percent(&self, lp_tokens: Balance) -> FixedBalance {
             let percent_provided = FixedBalance::from_num(lp_tokens).checked_div(
                 FixedBalance::from_num(self.total_lp_tokens)
@@ -394,20 +416,53 @@ mod market_maker {
             // get currency balances
             let balance_0: Balance = self.get_currency_balance(direction.0);
             let balance_1: Balance = self.get_currency_balance(direction.1);
-            let curve_k = balance_0.saturating_mul(balance_1);
 
             // liquidity checks
             if balance_1 == 0 {
                 return Err(Error::InsufficientLiquidity(direction.1));
             }
+            self.calc_opposite_currency_amount(balance_0, balance_1, amount_0)
+        }
 
-            let new_balance_0: Balance = balance_0.saturating_add(amount_0);
+        #[ink(message)]
+        pub fn estimate_exchange(
+            &self,
+            direction: Direction,
+            amount_0: Balance
+        ) -> Result<(Balance, Balance), Error> {
+            let balance_0: Balance = self.get_currency_balance(direction.0);
+            let balance_1: Balance = self.get_currency_balance(direction.1);
 
-            let new_balance_1: Balance = curve_k.saturating_div(new_balance_0);
+            // liquidity checks
+            if balance_1 == 0 {
+                return Err(Error::InsufficientLiquidity(direction.1));
+            }
+            let amount_1 = self.calc_opposite_currency_amount(
+                balance_0.saturating_add(amount_0),
+                balance_1,
+                amount_0
+            )?;
+            Ok((amount_0, amount_1))
+        }
 
-            let amount_1: Balance = balance_1.saturating_sub(new_balance_1);
-
-            Ok(amount_1)
+        pub fn calc_opposite_currency_amount(
+            &self,
+            balance_0: Balance,
+            balance_1: Balance,
+            amount_0: Balance
+        ) -> Result<Balance, Error> {
+            let fixed_balance_0 = FixedBalance::from_num(balance_0);
+            let fixed_balance_1 = FixedBalance::from_num(balance_1);
+            let fixed_amount_0 = FixedBalance::from_num(amount_0);
+            let fixed_curve_k = fixed_balance_0.saturating_mul(fixed_balance_1);
+            let new_balance_0 = fixed_balance_0.saturating_add(fixed_amount_0);
+            let new_balance_1_opt = fixed_curve_k.checked_div(new_balance_0);
+            if new_balance_1_opt.is_none() {
+                return Err(Error::DivisionByZero);
+            }
+            let new_balance_1 = new_balance_1_opt.unwrap();
+            let amount_1 = fixed_balance_1.saturating_sub(new_balance_1);
+            Ok(amount_1.to_num::<Balance>())
         }
 
         fn calc_fee(&self, amount: Balance) -> Balance {

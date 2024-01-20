@@ -140,6 +140,23 @@ mod cross_chain_transfer {
         pub fn get_transaction(&self, tx_id: String) -> Option<Transaction> {
             self.transactions.get(&tx_id)
         }
+
+        /// Modifies the code which is used to execute calls to this contract address (`AccountId`).
+        ///
+        /// We use this to upgrade the contract logic. We don't do any authorization here, any caller
+        /// can execute this method. In a production contract you would do some authorization here.
+        #[ink(message)]
+        pub fn set_code(&mut self, code_hash: [u8; 32]) {
+            let caller = self.env().caller();
+            assert!(caller == self.admin, "Only admin can set code hash.");
+            ink::env
+                ::set_code_hash(&code_hash)
+                .unwrap_or_else(|err| {
+                    panic!("Failed to `set_code_hash` to {:?} due to {:?}", code_hash, err)
+                });
+            ink::env::debug_println!("Switched code hash to {:?}.", code_hash);
+        }
+
         #[ink(message)]
         pub fn asset_commit(
             &mut self,

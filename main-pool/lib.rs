@@ -67,7 +67,11 @@ mod d9_main_pool {
             assert!(check.is_ok(), "Invalid caller");
             self.mining_pool = mining_pool;
         }
-
+        #[ink(message)]
+        pub fn test_function(&self) -> AccountId {
+            let caller = self.env().caller();
+            caller
+        }
         #[ink(message, payable)]
         pub fn burn(
             &mut self,
@@ -201,6 +205,22 @@ mod d9_main_pool {
             self.env().balance()
         }
 
+        /// Modifies the code which is used to execute calls to this contract address (`AccountId`).
+        ///
+        /// We use this to upgrade the contract logic. We don't do any authorization here, any caller
+        /// can execute this method. In a production contract you would do some authorization here.
+        #[ink(message)]
+        pub fn set_code(&mut self, code_hash: [u8; 32]) {
+            let caller = self.env().caller();
+            assert!(caller == self.admin, "Only admin can set code hash.");
+            ink::env
+                ::set_code_hash(&code_hash)
+                .unwrap_or_else(|err| {
+                    panic!("Failed to `set_code_hash` to {:?} due to {:?}", code_hash, err)
+                });
+            ink::env::debug_println!("Switched code hash to {:?}.", code_hash);
+        }
+
         fn callable_by(&self, account_id: AccountId) -> Result<(), Error> {
             let caller = self.env().caller();
             if caller != account_id {
@@ -278,7 +298,7 @@ mod d9_main_pool {
                         .push_arg(amount)
                 )
                 .returns::<Result<(), Error>>()
-                .invoke()
+                .try_invoke()
         }
 
         fn get_withdrawal_allowance(

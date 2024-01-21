@@ -121,6 +121,7 @@ pub enum Error {
     CrossContractCallFailed,
     /// withdrawal not permitted due to time constraint
     WithdrawalNotAllowed,
+    WithdrawalAmountZero,
     ///error getting ancestors from runtime
     /// then runtime returned an empty Ancestors array. shouldnt happen but just in case
     RuntimeErrorGettingAncestors,
@@ -145,6 +146,7 @@ pub enum Error {
     LoggingDisabled,
     CallRuntimeFailed,
     EcdsaRecoveryFailed,
+    WithdrawalAmountExceedsBalance,
 }
 
 impl From<EnvError> for Error {

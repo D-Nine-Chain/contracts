@@ -48,6 +48,18 @@ pub mod d9_burn_mining {
         }
 
         #[ink(message)]
+        pub fn set_day_milliseconds(
+            &mut self,
+            new_day_milliseconds: Timestamp
+        ) -> Result<(), Error> {
+            if self.env().caller() != self.admin {
+                return Err(Error::RestrictedFunction);
+            }
+            self.day_milliseconds = new_day_milliseconds;
+            Ok(())
+        }
+
+        #[ink(message)]
         pub fn get_account(&self, account_id: AccountId) -> Option<Account> {
             self.accounts.get(&account_id)
         }
@@ -124,10 +136,12 @@ pub mod d9_burn_mining {
             );
 
             let total_withdrawal = base_extraction.saturating_add(referral_boost);
+
             // Update the account's details
             let new_time = self.env().block_timestamp();
             account.last_withdrawal = Some(new_time.clone());
             account.last_interaction = new_time;
+            let old_balance_due = account.balance_due;
             account.balance_due = account.balance_due.saturating_sub(total_withdrawal);
             account.balance_paid = account.balance_paid.saturating_add(total_withdrawal);
             account.referral_boost_coefficients = (0, 0);
@@ -139,8 +153,13 @@ pub mod d9_burn_mining {
                 let ancestors = maybe_ancestors.unwrap();
                 self._update_ancestors_coefficents(base_extraction, &ancestors);
             }
-
-            Ok((total_withdrawal, account.last_withdrawal.unwrap()))
+            {
+                if total_withdrawal > old_balance_due {
+                    Ok((old_balance_due, account.last_withdrawal.unwrap()))
+                } else {
+                    Ok((total_withdrawal, account.last_withdrawal.unwrap()))
+                }
+            }
         }
 
         #[ink(message)]
@@ -188,7 +207,13 @@ pub mod d9_burn_mining {
             // Multiply the daily allowance by the number of days since the last withdrawal
             let allowance = daily_allowance.saturating_mul(days_since_last_action as u128); // cast needed here for arithmetic
 
-            allowance
+            {
+                if allowance > account.balance_due {
+                    return account.balance_due;
+                } else {
+                    return allowance;
+                }
+            }
         }
 
         fn _calculate_referral_boost_reward(

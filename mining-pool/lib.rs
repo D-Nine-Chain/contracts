@@ -5,6 +5,7 @@ pub use d9_chain_extension::D9Environment;
 #[ink::contract(env = D9Environment)]
 mod mining_pool {
     use super::*;
+    use ink::storage::Mapping;
     use scale::{ Decode, Encode };
     use ink::env::call::{ build_call, ExecutionInput, Selector };
     use ink::selector_bytes;
@@ -36,6 +37,7 @@ mod mining_pool {
         node_reward_pool: AccountId,
         amm_contract: AccountId,
         admin: AccountId,
+        amount_paid: Mapping<AccountId, Balance>,
     }
 
     impl MiningPool {
@@ -53,6 +55,7 @@ mod mining_pool {
                 merchant_contract,
                 amm_contract,
                 admin: Self::env().caller(),
+                amount_paid: Mapping::new(),
             }
         }
 
@@ -70,23 +73,32 @@ mod mining_pool {
             let _ = self.env().transfer(self.node_reward_pool, amount_to_pool);
             Ok(())
         }
-
-        #[ink(message, payable)]
-        pub fn request_burn_dividend(
-            &self,
-            user_id: AccountId,
-            amount: Balance
-        ) -> Result<(), Error> {
-            let valid_caller = self.only_callable_by(self.main_contract);
-
+        #[ink(message)]
+        pub fn send_to(&mut self, account_id: AccountId, amount: Balance) -> Result<(), Error> {
+            let valid_caller = self.only_callable_by(self.admin);
             if let Err(e) = valid_caller {
                 return Err(e);
             }
+            let _ = self.env().transfer(account_id, amount);
+            let total_paid = self.amount_paid.get(&account_id).unwrap_or(0);
+            self.amount_paid.insert(account_id, &total_paid.saturating_add(amount));
+            Ok(())
+        }
+
+        #[ink(message)]
+        pub fn request_burn_dividend(
+            &mut self,
+            user_id: AccountId,
+            amount: Balance
+        ) -> Result<(), Error> {
+            let _ = self.only_callable_by(self.main_contract)?;
 
             let payment_result = self.env().transfer(user_id, amount);
             if payment_result.is_err() {
                 return Err(Error::FailedToTransferD9ToUser);
             }
+            let total_paid = self.amount_paid.get(&user_id).unwrap_or(0);
+            self.amount_paid.insert(user_id, &total_paid.saturating_add(amount));
             Ok(())
         }
 

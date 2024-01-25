@@ -8,8 +8,9 @@ mod market_maker {
     use ink::selector_bytes;
     use sp_arithmetic::Perbill;
     use ink::env::call::{ build_call, ExecutionInput, Selector };
-    use substrate_fixed::{ FixedU128, types::extra::U12 };
-    type FixedBalance = FixedU128<U12>;
+    use substrate_fixed::{ FixedU128, types::extra::U30 };
+    type FixedBalance = FixedU128<U30>;
+    use ink::env::Error as EnvError;
     #[ink(storage)]
     pub struct MarketMaker {
         /// contract for usdt coin
@@ -70,6 +71,44 @@ mod market_maker {
         MultiplicationError,
         USDTTooSmall,
         USDTTooMuch,
+        SomeEnvironmentError,
+        CalledContractTrapped,
+        CalledContractReverted,
+        NotCallable,
+        SomeDecodeError,
+        SomeOffChainError,
+        CalleeTrapped,
+        CalleeReverted,
+        KeyNotFound,
+        _BelowSubsistenceThreshold,
+        EnvironmentalTransferFailed,
+        _EndowmentTooLow,
+        CodeNotFound,
+        Unknown,
+        LoggingDisabled,
+        CallRuntimeFailed,
+        EcdsaRecoveryFailed,
+        WithdrawalAmountExceedsBalance,
+    }
+
+    impl From<EnvError> for Error {
+        fn from(error: EnvError) -> Self {
+            match error {
+                EnvError::CalleeTrapped => Self::CalledContractTrapped,
+                EnvError::CalleeReverted => Self::CalledContractReverted,
+                EnvError::NotCallable => Self::NotCallable,
+                EnvError::KeyNotFound => Self::KeyNotFound,
+                EnvError::_BelowSubsistenceThreshold => Self::_BelowSubsistenceThreshold,
+                EnvError::TransferFailed => Self::EnvironmentalTransferFailed,
+                EnvError::_EndowmentTooLow => Self::_EndowmentTooLow,
+                EnvError::CodeNotFound => Self::CodeNotFound,
+                EnvError::Unknown => Self::Unknown,
+                EnvError::LoggingDisabled => Self::LoggingDisabled,
+                EnvError::CallRuntimeFailed => Self::CallRuntimeFailed,
+                EnvError::EcdsaRecoveryFailed => Self::EcdsaRecoveryFailed,
+                _ => Self::SomeEnvironmentError,
+            }
+        }
     }
 
     impl MarketMaker {
@@ -147,7 +186,7 @@ mod market_maker {
         }
 
         #[ink(message)]
-        pub fn remove_liquidity(&mut self) -> Result<(), Error> {
+        pub fn remove_liquidity(&mut self) -> Result<(Balance, Balance), Error> {
             let caller = self.env().caller();
             let (d9_reserves, usdt_reserves) = self.get_currency_reserves();
 
@@ -156,7 +195,7 @@ mod market_maker {
                 return Err(Error::LiquidityProviderNotFound);
             }
 
-            // Calculate  contribution
+            // Calculate  liquidity contribution
             let liquidity_percent = self.calculate_lp_percent(lp_tokens);
             let d9_liquidity = liquidity_percent.saturating_mul_int(d9_reserves);
             let usdt_liquidity = liquidity_percent.saturating_mul_int(usdt_reserves);
@@ -189,7 +228,7 @@ mod market_maker {
             self.total_lp_tokens = self.total_lp_tokens.saturating_sub(lp_tokens);
             self.liquidity_providers.remove(&caller);
 
-            Ok(())
+            Ok((d9_plus_fee_portion.to_num::<Balance>(), usdt_liquidity.to_num::<Balance>()))
         }
         /// Modifies the code which is used to execute calls to this contract address (`AccountId`).
         ///
@@ -527,7 +566,7 @@ mod market_maker {
             recipient: AccountId,
             amount: Balance
         ) -> Result<(), Error> {
-            build_call::<D9Environment>()
+            let result = build_call::<D9Environment>()
                 .call(self.usdt_contract)
                 .gas_limit(0)
                 .exec_input(
@@ -537,7 +576,8 @@ mod market_maker {
                         .push_arg([0u8])
                 )
                 .returns::<Result<(), Error>>()
-                .invoke()
+                .try_invoke()?;
+            result.unwrap()
         }
 
         pub fn receive_usdt_from_user(
@@ -545,7 +585,7 @@ mod market_maker {
             sender: AccountId,
             amount: Balance
         ) -> Result<(), Error> {
-            build_call::<D9Environment>()
+            let result = build_call::<D9Environment>()
                 .call(self.usdt_contract)
                 .gas_limit(0)
                 .exec_input(
@@ -556,7 +596,8 @@ mod market_maker {
                         .push_arg([0u8])
                 )
                 .returns::<Result<(), Error>>()
-                .invoke()
+                .try_invoke()?;
+            result.unwrap()
         }
     }
 

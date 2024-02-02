@@ -167,6 +167,10 @@ mod d9_merchant_mining {
         green_points: Balance,
     }
 
+    #[derive(Encode, Decode, Debug, PartialEq, Eq, Copy, Clone)]
+    #[cfg_attr(feature = "std", derive(scale_info::TypeInfo))]
+    pub struct Direction(Currency, Currency);
+
     impl D9MerchantMining {
         /// Constructor that initializes the `bool` value to the given `init_value`.
         #[ink(constructor)]
@@ -187,7 +191,6 @@ mod d9_merchant_mining {
                 processed_d9: Balance::default(),
             }
         }
-        // old main xssaidD9aqTCqsbLn1ncF2gtZyr4MreBXzXT8fquLZfcMrB
         /// create merchant account subscription
         #[ink(message)]
         pub fn subscribe(&mut self, usdt_amount: Balance) -> Result<Timestamp, Error> {
@@ -195,9 +198,9 @@ mod d9_merchant_mining {
             if usdt_amount < self.subscription_fee {
                 return Err(Error::InsufficientPayment);
             }
-            let validate_transfer = self.validate_usdt_transfer(merchant_id, usdt_amount)?;
+            let _ = self.validate_usdt_transfer(merchant_id, usdt_amount)?;
 
-            let receive_usdt_result = self.receive_usdt_from_user(merchant_id, usdt_amount)?;
+            let _ = self.receive_usdt_from_user(merchant_id, usdt_amount)?;
 
             let send_usdt_result = self.contract_sends_usdt_to(self.amm_contract, usdt_amount);
             if send_usdt_result.is_err() {
@@ -326,42 +329,70 @@ mod d9_merchant_mining {
             result.unwrap()
         }
 
+        #[ink(message, payable)]
+        pub fn give_green_points_d9(
+            &mut self,
+            consumer_id: AccountId
+        ) -> Result<GreenPointsResult, Error> {
+            let merchant_id = self.env().caller();
+            self.validate_merchant(merchant_id)?;
+            let d9_amount = self.env().transferred_value();
+
+            // Convert to USDT and delegate to give_green_points_internal
+            let give_points_result = self.give_green_points_internal(
+                consumer_id,
+                self.estimate_usdt(d9_amount)?
+            );
+
+            self.call_mining_pool_to_process(d9_amount)?;
+            self.credit_pool(d9_amount);
+            give_points_result
+        }
+
         #[ink(message)]
         pub fn give_green_points_usdt(
             &mut self,
             consumer_id: AccountId,
             usdt_payment: Balance
         ) -> Result<GreenPointsResult, Error> {
-            let merchant_id: AccountId = self.env().caller();
-            let _ = self.validate_merchant(merchant_id)?;
-            let _ = self.validate_usdt_transfer(merchant_id, usdt_payment)?;
-            let _ = self.receive_usdt_from_user(merchant_id, usdt_payment)?;
+            let merchant_id = self.env().caller();
+            self.validate_merchant(merchant_id)?;
+            self.validate_usdt_transfer(merchant_id, usdt_payment)?;
+            self.receive_usdt_from_user(merchant_id, usdt_payment)?;
 
-            // calculate green points
-            let usdt_amount_to_green = usdt_payment.saturating_mul(100).saturating_div(16);
-            let consumer_green_points = self.calculate_green_points(usdt_amount_to_green);
-            let sixteen_percent = Perbill::from_rational(16u32, 100u32);
-            let merchant_green_points = sixteen_percent.mul_floor(consumer_green_points);
+            // Delegate to give_green_points_internal
+            let give_green_points_result = self.give_green_points_internal(
+                consumer_id,
+                usdt_payment
+            );
 
-            //update accounts
-            self.add_green_points(consumer_id, consumer_green_points);
-            self.add_green_points(merchant_id, merchant_green_points);
-
-            //convert to d9
-            let conversion_result = self.convert_to_d9(usdt_payment);
-            if let Err(e) = conversion_result {
-                return Err(e);
-            }
-
-            // send to mining pool
-            let d9_amount = conversion_result.unwrap();
-            let _ = self.call_mining_pool_to_process(d9_amount)?;
+            // Convert to D9, send to mining pool, and credit pool
+            let d9_amount = self.convert_to_d9(usdt_payment)?;
+            self.call_mining_pool_to_process(d9_amount)?;
             self.credit_pool(d9_amount);
+            give_green_points_result
+        }
 
-            //emit event
+        fn give_green_points_internal(
+            &mut self,
+            consumer_id: AccountId,
+            amount: Balance
+        ) -> Result<GreenPointsResult, Error> {
+            // Calculate green points
+            let usdt_amount_to_green = amount.saturating_mul(100).saturating_div(16);
+            let consumer_green_points = self.calculate_green_points(usdt_amount_to_green);
+            let merchant_green_points = Perbill::from_rational(16u32, 100u32).mul_floor(
+                consumer_green_points
+            );
+
+            // Update accounts
+            self.add_green_points(consumer_id, consumer_green_points);
+            self.add_green_points(self.env().caller(), merchant_green_points);
+
+            // Emit event
             self.env().emit_event(GreenPointsTransaction {
                 merchant: GreenPointsCreated {
-                    account_id: merchant_id,
+                    account_id: self.env().caller(),
                     green_points: merchant_green_points,
                 },
                 consumer: GreenPointsCreated {
@@ -374,27 +405,6 @@ mod d9_merchant_mining {
                 merchant: merchant_green_points,
                 consumer: consumer_green_points,
             })
-        }
-
-        #[ink(message, payable)]
-        pub fn give_green_points_d9(
-            &mut self,
-            consumer_id: AccountId
-        ) -> Result<GreenPointsResult, Error> {
-            let merchant_id = self.env().caller();
-            let validate_merchant = self.validate_merchant(merchant_id);
-            if let Err(e) = validate_merchant {
-                return Err(e);
-            }
-            let d9_amount = self.env().transferred_value();
-
-            //convert to usdt
-            let conversion_result = self.convert_to_usdt(d9_amount);
-            if conversion_result.is_err() {
-                return Err(Error::GettingUSDTFromAMM);
-            }
-            let usdt_amount = conversion_result.unwrap();
-            self.give_green_points_usdt(consumer_id, usdt_amount)
         }
 
         #[ink(message, payable)]
@@ -625,6 +635,20 @@ mod d9_merchant_mining {
                 )
                 .returns::<Result<(), Error>>()
                 .invoke()
+        }
+
+        fn estimate_usdt(&self, d9_amount: Balance) -> Result<Balance, Error> {
+            let result = build_call::<D9Environment>()
+                .call(self.amm_contract)
+                .gas_limit(0)
+                .exec_input(
+                    ExecutionInput::new(Selector::new(selector_bytes!("estimate_exchange")))
+                        .push_arg(d9_amount)
+                        .push_arg(Direction(Currency::D9, Currency::USDT))
+                )
+                .returns::<Result<Balance, Error>>()
+                .try_invoke()?;
+            result.unwrap()
         }
 
         pub fn receive_usdt_from_user(

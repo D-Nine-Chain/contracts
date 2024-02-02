@@ -15,7 +15,7 @@ mod d9_merchant_mining {
 
     #[ink(storage)]
     pub struct D9MerchantMining {
-        /// accountId to mercchat account expiry date
+        /// accountId to merchant account expiry date
         /// rewards system accounts
         merchant_expiry: Mapping<AccountId, Timestamp>,
         accounts: Mapping<AccountId, Account>,
@@ -25,6 +25,8 @@ mod d9_merchant_mining {
         mining_pool: AccountId,
         milliseconds_day: Timestamp,
         admin: AccountId,
+        // total number of d9 processed
+        processed_d9: Balance,
     }
 
     #[derive(Encode, Decode, Debug, PartialEq, Eq, Copy, Clone)]
@@ -182,6 +184,7 @@ mod d9_merchant_mining {
                 accounts: Default::default(),
                 subscription_fee: 1000,
                 milliseconds_day: 86_400_000,
+                processed_d9: Balance::default(),
             }
         }
         // old main xssaidD9aqTCqsbLn1ncF2gtZyr4MreBXzXT8fquLZfcMrB
@@ -192,14 +195,10 @@ mod d9_merchant_mining {
             if usdt_amount < self.subscription_fee {
                 return Err(Error::InsufficientPayment);
             }
-            let validate_transfer = self.validate_usdt_transfer(merchant_id, usdt_amount);
-            if let Err(e) = validate_transfer {
-                return Err(e);
-            }
-            let receive_usdt_result = self.receive_usdt_from_user(merchant_id, usdt_amount);
-            if let Err(e) = receive_usdt_result {
-                return Err(e);
-            }
+            let validate_transfer = self.validate_usdt_transfer(merchant_id, usdt_amount)?;
+
+            let receive_usdt_result = self.receive_usdt_from_user(merchant_id, usdt_amount)?;
+
             let send_usdt_result = self.contract_sends_usdt_to(self.amm_contract, usdt_amount);
             if send_usdt_result.is_err() {
                 return Err(Error::SendingUSDTToAMM);
@@ -207,6 +206,16 @@ mod d9_merchant_mining {
 
             let update_expiry_result = self.update_subscription(merchant_id, usdt_amount);
             update_expiry_result
+        }
+
+        /// get the total of d9 processed by this contract e.g. d9 used to get green points
+        #[ink(message)]
+        pub fn get_total_merchant_processed_d9(&self) -> Balance {
+            self.processed_d9
+        }
+
+        fn credit_pool(&mut self, amount: Balance) {
+            self.processed_d9 = self.processed_d9.saturating_add(amount);
         }
 
         ///create/update subscription, returns new expiry `Timestamp` Result
@@ -252,7 +261,7 @@ mod d9_merchant_mining {
             if account.green_points == 0 {
                 return Err(Error::NothingToRedeem);
             }
-            //caculate green => red points conversion
+            //calculate green => red points conversion
             let last_redeem_timestamp = account.last_conversion.unwrap_or(account.created_at);
 
             let time_based_red_points = self.calculate_red_points_from_time(
@@ -260,7 +269,6 @@ mod d9_merchant_mining {
                 last_redeem_timestamp
             );
             let relationship_based_red_points = self.calculate_red_points_from_relationships(
-                account.green_points,
                 account.relationship_factors
             );
 
@@ -294,7 +302,7 @@ mod d9_merchant_mining {
             self.accounts.insert(caller, &account);
             //attempt to pay ancestors
             if let Some(ancestors) = self.get_ancestors(caller) {
-                let _ = self.update_ancestors_coefficients(&ancestors);
+                let _ = self.update_ancestors_coefficients(&ancestors, time_based_red_points);
             }
 
             Ok(d9_amount)
@@ -348,9 +356,7 @@ mod d9_merchant_mining {
             // send to mining pool
             let d9_amount = conversion_result.unwrap();
             let _ = self.call_mining_pool_to_process(d9_amount)?;
-            // if mining_pool_process_result.is_err() {
-            //     return Err(Error::SendingD9ToMiningPool);
-            // }
+            self.credit_pool(d9_amount);
 
             //emit event
             self.env().emit_event(GreenPointsTransaction {
@@ -462,10 +468,8 @@ mod d9_merchant_mining {
 
             //send to mining pool
             let _ = self.call_mining_pool_to_process(d9_amount)?;
-            // if main_transfer_result.is_err() {
-            //     return Err(Error::SendingD9ToMiningPool);
-            // }
 
+            self.credit_pool(d9_amount);
             self.env().emit_event(GreenPointsTransaction {
                 merchant: GreenPointsCreated {
                     account_id: merchant_id,
@@ -527,17 +531,6 @@ mod d9_merchant_mining {
                 });
             ink::env::debug_println!("Switched code hash to {:?}.", code_hash);
         }
-
-        //   #[ink(message)]
-        //   pub fn set_code(&mut self, code_hash: [u8; 32]) {
-        //       self.only_admin()?;
-        //       ink::env
-        //           ::set_code_hash(&code_hash)
-        //           .unwrap_or_else(|err| {
-        //               panic!("Failed to `set_code_hash` to {:?} due to {:?}", code_hash, err)
-        //           });
-        //       ink::env::debug_println!("Switched code hash to {:?}.", code_hash);
-        //   }
 
         fn validate_usdt_transfer(&self, account: AccountId, amount: Balance) -> Result<(), Error> {
             let check_balance_result = self.validate_usdt_balance(account, amount);
@@ -612,10 +605,6 @@ mod d9_merchant_mining {
                 return Err(Error::GrantingAllowanceFailed);
             }
             let d9_amount = self.amm_get_d9(amount)?;
-            // if conversion_result.is_err() {
-            //     return Err(Error::AMMConversionFailed);
-            // }
-            // let d9_amount = conversion_result.unwrap();
 
             Ok(d9_amount)
         }
@@ -706,6 +695,13 @@ mod d9_merchant_mining {
             Ok(())
         }
 
+        #[ink(message)]
+        pub fn change_admin(&mut self, new_admin: AccountId) -> Result<(), Error> {
+            self.only_admin()?;
+            self.admin = new_admin;
+            Ok(())
+        }
+
         ///get green points from usdt amount
         fn calculate_green_points(&self, amount: Balance) -> Balance {
             amount.saturating_mul(100)
@@ -740,28 +736,10 @@ mod d9_merchant_mining {
         /// 10% for parent, 1% for each ancestor
         fn calculate_red_points_from_relationships(
             &self,
-            green_points: Balance,
+            // red_points: Balance,
             referral_coefficients: (Balance, Balance)
         ) -> Balance {
-            // let transmutation_rate = Perbill::from_rational(1u32, 2000u32);
-            let transmutation_rate = Perbill::from_rational(1u32, 2000u32);
-
-            let ten_percent = Perbill::from_rational(1u32, 10u32);
-            let sons_factored_green_points = ten_percent
-                .mul_floor(referral_coefficients.0)
-                .saturating_mul(green_points);
-
-            let one_percent = Perbill::from_rational(1u32, 100u32);
-            let grandsons_factored_green_points = one_percent
-                .mul_floor(referral_coefficients.1)
-                .saturating_mul(green_points);
-
-            let red_points_from_sons = transmutation_rate.mul_floor(sons_factored_green_points);
-            let red_points_from_grandsons = transmutation_rate.mul_floor(
-                grandsons_factored_green_points
-            );
-
-            let total_red_points = red_points_from_sons.saturating_add(red_points_from_grandsons);
+            let total_red_points = referral_coefficients.0.saturating_add(referral_coefficients.1);
             total_red_points
         }
 
@@ -797,12 +775,19 @@ mod d9_merchant_mining {
             self.accounts.insert(account_id, &account);
         }
 
-        fn update_ancestors_coefficients(&mut self, ancestors: &[AccountId]) {
+        fn update_ancestors_coefficients(
+            &mut self,
+            ancestors: &[AccountId],
+            withdraw_amount: Balance
+        ) {
             //modify parent
             let parent = ancestors.first();
             if let Some(parent) = parent {
                 if let Some(mut account) = self.accounts.get(parent) {
-                    account.relationship_factors.0 += 1;
+                    let ten_percent = Perbill::from_rational(1u32, 10u32);
+                    let parent_bonus = ten_percent.mul_floor(withdraw_amount);
+                    account.relationship_factors.0 =
+                        account.relationship_factors.0.saturating_add(parent_bonus);
                     account.relationship_factors = account.relationship_factors;
                     self.accounts.insert(parent, &account);
                 }
@@ -811,7 +796,10 @@ mod d9_merchant_mining {
             //modify others
             for ancestor in ancestors.iter().skip(1) {
                 if let Some(mut account) = self.accounts.get(ancestor) {
-                    account.relationship_factors.1 += 1;
+                    let one_percent = Perbill::from_rational(1u32, 100u32);
+                    let ancestor_bonus: Balance = one_percent.mul_floor(withdraw_amount);
+                    account.relationship_factors.1 =
+                        account.relationship_factors.1.saturating_add(ancestor_bonus);
                     account.relationship_factors = account.relationship_factors;
                     self.accounts.insert(ancestor, &account);
                 }

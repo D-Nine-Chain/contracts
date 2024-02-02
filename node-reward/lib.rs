@@ -3,18 +3,20 @@ use scale::{ Decode, Encode };
 pub use d9_chain_extension::D9Environment;
 #[ink::contract(env = D9Environment)]
 mod node_reward {
+    use core::result;
+
     use super::*;
     use ink::storage::Mapping;
     use ink::prelude::vec::Vec;
     use ink::env::call::{ build_call, ExecutionInput, Selector };
     use ink::selector_bytes;
+    use scale_info::build;
     use sp_arithmetic::Perbill;
     #[ink(storage)]
     pub struct NodeReward {
         admin: AccountId,
         main: AccountId,
-        tier_allotments_by_session_index: Mapping<u32, TierAllotments>,
-        last_paid_session: Mapping<AccountId, u32>,
+        mining_pool: AccountId,
         node_surrogates: Mapping<AccountId, AccountId>,
     }
 
@@ -72,6 +74,7 @@ mod node_reward {
         CallerNotNodeController,
         IssuingDeterminingPayout,
         ErrorGettingNodeSharingPercentage,
+        ErrorGettingMiningPool,
     }
 
     impl NodeReward {
@@ -81,8 +84,7 @@ mod node_reward {
             Self {
                 admin,
                 main,
-                tier_allotments_by_session_index: Mapping::new(),
-                last_paid_session: Mapping::new(),
+                mining_pool,
                 node_surrogates: Mapping::new(),
             }
         }
@@ -95,7 +97,7 @@ mod node_reward {
         }
 
         #[ink(message)]
-        pub fn get_tier_allotments(&self, session_index: u32) -> Option<TierAllotments> {
+        pub fn get_tier_reward_allotments(&self, session_index: u32) -> Option<TierAllotments> {
             let tier_allotment_opt = self.tier_allotments_by_session_index.get(&session_index);
             tier_allotment_opt
         }
@@ -125,6 +127,33 @@ mod node_reward {
                     return Err(e);
                 }
             };
+        }
+
+        #[ink(message)]
+        pub fn get_mining_pool_total(&self) -> Result<Balance, Error> {
+            self.get_mining_pool_total_from_contract()
+        }
+
+        #[ink(message)]
+        pub fn get_node_pool_total(&self) -> Balance {
+            self.env().balance()
+        }
+
+        fn get_mining_pool_total_from_contract(&self) -> Result<Balance, Error> {
+            let result = build_call()
+                .call(self.mining_pool)
+                .gas_limit(0)
+                .exec_input(
+                    ExecutionInput::new(Selector::new(selector_bytes!("get_mining_pool_total")))
+                        .push_arg(user_account)
+                        .push_arg(redeemable_usdt)
+                )
+                .returns::<Balance>()
+                .try_invoke()?;
+            if result.is_err() {
+                return Err(Error::ErrorGettingMiningPool);
+            }
+            Ok(result.unwrap())
         }
 
         /// the same as `node_request_payment` but the node controller is the one calling the function
@@ -162,7 +191,7 @@ mod node_reward {
                 return Err(e);
             }
             let session_index = session_index_result.unwrap();
-            let session_record_result = self.get_tier_allotments();
+            let session_record_result = self.get_tier_reward_allotments(session_index);
             if let Err(e) = session_record_result {
                 return Err(e);
             }
@@ -219,7 +248,7 @@ mod node_reward {
             }
             let node_tier = tier_inquiry_result.unwrap();
 
-            let tier_allotment_request = self.get_tier_allotments(session_index);
+            let tier_allotment_request = self.get_tier_reward_allotments(session_index);
             if let Err(e) = tier_allotment_request {
                 return Err(e);
             }

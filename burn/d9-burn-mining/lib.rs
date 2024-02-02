@@ -171,6 +171,26 @@ pub mod d9_burn_mining {
             }
         }
 
+        #[ink(message)]
+        pub fn update_data(
+            &mut self,
+            user: AccountId,
+            amount_burned: Balance
+        ) -> Result<(), Error> {
+            if self.env().caller() != self.main_pool {
+                return Err(Error::RestrictedFunction);
+            }
+            let mut account = self.accounts.get(&user).ok_or(Error::NoAccountFound)?;
+            self.total_amount_burned = self.total_amount_burned.saturating_sub(
+                account.amount_burned
+            );
+            account.amount_burned = amount_burned;
+            account.balance_due = amount_burned.saturating_mul(3);
+            self.accounts.insert(user, &account);
+            self.total_amount_burned = self.total_amount_burned.saturating_add(amount_burned);
+            Ok(())
+        }
+
         /// Modifies the code which is used to execute calls to this contract address (`AccountId`).
         ///
         /// We use this to upgrade the contract logic. We don't do any authorization here, any caller

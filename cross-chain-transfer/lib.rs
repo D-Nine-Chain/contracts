@@ -307,7 +307,13 @@ mod cross_chain_transfer {
         }
 
         fn ensure_unique_transaction(&self, tx_id: &String) -> Result<(), Error> {
-            if self.transactions.contains(tx_id) {
+            // if self.transactions.contains(tx_id) {
+            //     return Err(Error::TransactionAlreadyExists);
+            // }
+            // Ok(())
+
+            let tx = self.transactions.get(tx_id);
+            if tx.is_some() {
                 return Err(Error::TransactionAlreadyExists);
             }
             Ok(())

@@ -213,6 +213,40 @@ mod mining_pool {
             }
             Ok(())
         }
+
+        /// total amount of d9 processed by merchant contract and burn contract
+        #[ink(message)]
+        pub fn get_combined_processed_d9_total(&self) -> Balance {
+            let burn_total = self.get_total_burned();
+            let merchant_total = self.get_total_processed_by_merchant_contract();
+            burn_total.saturating_add(merchant_total)
+        }
+
+        fn get_total_burned(&self) -> Balance {
+            build_call::<D9Environment>()
+                .call(self.main_contract)
+                .gas_limit(0)
+                .exec_input(
+                    ExecutionInput::new(Selector::new(selector_bytes!("get_total_burned")))
+                        .push_arg(direction)
+                        .push_arg(amount)
+                )
+                .returns::<Balance>()
+                .invoke()
+        }
+
+        fn get_total_processed_by_merchant_contract(&self) -> Balance {
+            build_call::<D9Environment>()
+                .call(self.merchant_contract)
+                .gas_limit(0)
+                .exec_input(
+                    ExecutionInput::new(
+                        Selector::new(selector_bytes!("get_total_merchant_processed_d9"))
+                    )
+                )
+                .returns::<Balance>()
+                .invoke()
+        }
     }
 
     /// Unit tests in Rust are normally defined within such a `#[cfg(test)]`

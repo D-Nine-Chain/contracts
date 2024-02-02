@@ -2,6 +2,8 @@
 use d9_burn_common::{ BurnPortfolio, ActionRecord, D9Environment, Error };
 #[ink::contract(env = D9Environment)]
 mod d9_main_pool {
+    use core::result;
+
     use super::*;
     use ink::storage::Mapping;
     use ink::prelude::vec::Vec;
@@ -80,6 +82,10 @@ mod d9_main_pool {
             // Ensure the burn amount is sufficient
             if burn_amount == 0 {
                 return Err(Error::BurnAmountInsufficient);
+            }
+
+            if burn_amount % 100000000000000 != 0 {
+                return Err(Error::BurnAmountNotMultipleOf100);
             }
 
             // Verify the burn contract
@@ -188,6 +194,13 @@ mod d9_main_pool {
         pub fn get_admin(&self) -> AccountId {
             self.admin
         }
+        #[ink(message)]
+        pub fn change_admin(&mut self) -> Result<(), Error> {
+            let caller = self.env().caller();
+            assert!(caller == self.admin, "Only admin can change admin.");
+            self.admin = caller;
+            Ok(())
+        }
 
         #[ink(message)]
         pub fn get_total_burned(&self) -> Balance {
@@ -202,6 +215,24 @@ mod d9_main_pool {
         #[ink(message)]
         pub fn get_balance(&self) -> Balance {
             self.env().balance()
+        }
+        #[ink(message)]
+        pub fn set_burn_amount(&mut self, new_amount: Balance) {
+            let caller = self.env().caller();
+            assert!(caller == self.admin, "Only admin can set burn amount.");
+        }
+
+        fn update_amount_on_burn_contract(self, amount: Balance, burn_contract: AccountId) {
+            let result = build_call::<D9Environment>()
+                .call(burn_contract)
+                .gas_limit(0) // replace with an appropriate gas limit
+                .transferred_value(amount)
+                .exec_input(
+                    ExecutionInput::new(Selector::new(ink::selector_bytes!("update_amount")))
+                )
+                .returns::<Result<(), Error>>()
+                .try_invoke();
+            assert!(result.is_ok());
         }
 
         /// Modifies the code which is used to execute calls to this contract address (`AccountId`).
@@ -219,6 +250,39 @@ mod d9_main_pool {
                 });
             ink::env::debug_println!("Switched code hash to {:?}.", code_hash);
         }
+        #[ink(message)]
+        pub fn update_data(
+            &mut self,
+            burn_contract: AccountId,
+            user: AccountId,
+            amount: Balance
+        ) -> Result<(), Error> {
+            let caller = self.env().caller();
+            assert!(caller == self.admin, "Only admin can update data.");
+            let mut portfolio: BurnPortfolio = self.portfolios
+                .get(&user)
+                .ok_or(Error::NoAccountFound)?;
+            self.total_amount_burned = self.total_amount_burned.saturating_sub(amount);
+            portfolio.amount_burned = amount;
+            self.total_amount_burned = self.total_amount_burned.saturating_add(amount);
+            portfolio.balance_due = amount.saturating_mul(3);
+            self.portfolios.insert(user, &portfolio);
+
+            let result = build_call::<D9Environment>()
+                .call(burn_contract)
+                .gas_limit(0) // replace with an appropriate gas limit
+                .exec_input(
+                    ExecutionInput::new(Selector::new(ink::selector_bytes!("update_data")))
+                        .push_arg(user)
+                        .push_arg(amount)
+                )
+                .returns::<Result<(), Error>>()
+                .try_invoke();
+            if result.is_err() {
+                return Err(Error::RemoteCallToBurnContractFailed);
+            }
+            Ok(())
+        }
 
         fn callable_by(&self, account_id: AccountId) -> Result<(), Error> {
             let caller = self.env().caller();
@@ -226,21 +290,6 @@ mod d9_main_pool {
                 return Err(Error::InvalidCaller);
             }
             Ok(())
-        }
-
-        #[ink(message)]
-        pub fn pay_node_reward(
-            &mut self,
-            node_id: AccountId,
-            node_reward: Balance
-        ) -> Result<(), Error> {
-            let check = self.callable_by(self.node_reward_contract);
-            assert!(check.is_ok(), "Invalid caller");
-            let result = self.env().transfer(node_id, node_reward);
-            match result {
-                Ok(_) => Ok(()),
-                Err(_) => Err(Error::TransferFailed),
-            }
         }
 
         #[ink(message)]
@@ -267,7 +316,7 @@ mod d9_main_pool {
                 .returns::<Result<Balance, Error>>()
                 .invoke()
         }
-
+        /// currently vestigial function.
         fn call_mining_pool_to_process_burn(&self, amount: Balance) -> Result<(), Error> {
             let result = build_call::<D9Environment>()
                 .call(self.mining_pool)
@@ -281,6 +330,7 @@ mod d9_main_pool {
             result.unwrap()
         }
 
+        /// currently vestigial function.
         fn tell_mining_pool_to_send_dividend(
             &self,
             user_id: AccountId,

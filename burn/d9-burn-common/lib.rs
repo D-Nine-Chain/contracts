@@ -117,6 +117,7 @@ pub enum Error {
     InvalidBurnContract,
     /// main contract already has this burn contract
     BurnContractAlreadyAdded,
+    BurnAmountNotMultipleOf100,
     /// call between contracts failed
     CrossContractCallFailed,
     /// withdrawal not permitted due to time constraint

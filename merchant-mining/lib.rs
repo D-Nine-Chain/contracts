@@ -29,13 +29,6 @@ mod d9_merchant_mining {
         // processed_d9: Balance,
     }
 
-    #[derive(Encode, Decode, Debug, PartialEq, Eq, Copy, Clone)]
-    #[cfg_attr(feature = "std", derive(scale_info::TypeInfo))]
-    pub enum Currency {
-        D9,
-        USDT,
-    }
-
     #[derive(Decode, Encode)]
     #[cfg_attr(
         feature = "std",
@@ -68,7 +61,15 @@ mod d9_merchant_mining {
             }
         }
     }
-
+    #[derive(Encode, Decode, Debug, PartialEq, Eq, Copy, Clone)]
+    #[cfg_attr(feature = "std", derive(scale_info::TypeInfo))]
+    pub enum Currency {
+        D9,
+        USDT,
+    }
+    #[derive(Encode, Decode, Debug, PartialEq, Eq, Copy, Clone)]
+    #[cfg_attr(feature = "std", derive(scale_info::TypeInfo))]
+    pub struct Direction(Currency, Currency);
     // data to return to user
     #[derive(Decode, Encode)]
     #[cfg_attr(
@@ -693,13 +694,15 @@ mod d9_merchant_mining {
         }
 
         fn estimate_usdt(&self, amount: Balance) -> Result<Balance, Error> {
+            let direction = Direction(Currency::D9, Currency::USDT);
             // this result is to catch any error in calling originating from the environment
             let cross_contract_call_result = build_call::<D9Environment>()
                 .call(self.amm_contract)
                 .gas_limit(0)
-                .transferred_value(amount)
                 .exec_input(
                     ExecutionInput::new(Selector::new(selector_bytes!("estimate_exchange")))
+                        .push_arg(direction)
+                        .push_arg(amount)
                 )
                 .returns::<Result<(Balance, Balance), Error>>()
                 .try_invoke()?;

@@ -121,6 +121,7 @@ mod d9_merchant_mining {
         LoggingDisabled,
         CallRuntimeFailed,
         EcdsaRecoveryFailed,
+        ErrorGettingEstimate,
     }
 
     impl From<EnvError> for Error {
@@ -340,9 +341,10 @@ mod d9_merchant_mining {
             let merchant_id = self.env().caller();
             self.validate_merchant(merchant_id)?;
             let d9_amount = self.env().transferred_value();
-
+            let get_usdt_estimate_result = self.estimate_usdt(d9_amount)?;
+            let usdt_amount = get_usdt_estimate_result;
             // Convert to USDT and delegate to give_green_points_internal
-            self.give_green_points_internal(consumer_id, self.convert_to_usdt(d9_amount)?)
+            self.give_green_points_internal(consumer_id, usdt_amount)
         }
 
         #[ink(message)]
@@ -688,6 +690,27 @@ mod d9_merchant_mining {
                 .returns::<Result<Balance, Error>>()
                 .try_invoke()?;
             result.unwrap()
+        }
+
+        fn estimate_usdt(&self, amount: Balance) -> Result<Balance, Error> {
+            // this result is to catch any error in calling originating from the environment
+            let cross_contract_call_result = build_call::<D9Environment>()
+                .call(self.amm_contract)
+                .gas_limit(0)
+                .transferred_value(amount)
+                .exec_input(
+                    ExecutionInput::new(Selector::new(selector_bytes!("estimate_exchange")))
+                )
+                .returns::<Result<(Balance, Balance), Error>>()
+                .try_invoke()?;
+            // this result will return the value or some error from the contract itself
+            let method_call_result = cross_contract_call_result.unwrap();
+            if method_call_result.is_err() {
+                return Err(Error::ErrorGettingEstimate);
+            }
+
+            let usdt_balance = method_call_result.unwrap().1;
+            Ok(usdt_balance)
         }
 
         /// function to restrict access to admin

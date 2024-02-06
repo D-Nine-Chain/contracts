@@ -123,6 +123,7 @@ mod d9_merchant_mining {
         CallRuntimeFailed,
         EcdsaRecoveryFailed,
         ErrorGettingEstimate,
+        CrossContractCallErrorGettingEstimate,
     }
 
     impl From<EnvError> for Error {
@@ -342,8 +343,7 @@ mod d9_merchant_mining {
             let merchant_id = self.env().caller();
             self.validate_merchant(merchant_id)?;
             let d9_amount = self.env().transferred_value();
-            let get_usdt_estimate_result = self.estimate_usdt(d9_amount)?;
-            let usdt_amount = get_usdt_estimate_result;
+            let usdt_amount = self.convert_to_usdt(d9_amount)?;
             // Convert to USDT and delegate to give_green_points_internal
             self.give_green_points_internal(consumer_id, usdt_amount)
         }
@@ -705,14 +705,20 @@ mod d9_merchant_mining {
                         .push_arg(amount)
                 )
                 .returns::<Result<(Balance, Balance), Error>>()
-                .try_invoke()?;
+                .try_invoke();
             // this result will return the value or some error from the contract itself
+            if cross_contract_call_result.is_err() {
+                return Err(Error::CrossContractCallErrorGettingEstimate);
+            }
             let method_call_result = cross_contract_call_result.unwrap();
             if method_call_result.is_err() {
                 return Err(Error::ErrorGettingEstimate);
             }
-
-            let usdt_balance = method_call_result.unwrap().1;
+            let something = method_call_result.unwrap();
+            if something.is_err() {
+                return Err(Error::ErrorGettingEstimate);
+            }
+            let usdt_balance = something.unwrap().1;
             Ok(usdt_balance)
         }
 

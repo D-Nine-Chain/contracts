@@ -1,4 +1,7 @@
 #![cfg_attr(not(feature = "std"), no_std, no_main)]
+/// calculate the share of session reward that is due to a particular node
+/// session rewards are calculated as 10 percent of the accumulation of total burned tokens in the main pool
+/// and total of d9 tokens processed by the merchant contract
 use scale::{ Decode, Encode };
 pub use d9_chain_extension::D9Environment;
 #[ink::contract(env = D9Environment)]
@@ -6,6 +9,7 @@ mod node_reward {
     use core::result;
 
     use super::*;
+    use ink::primitives::AccountId;
     use ink::storage::Mapping;
     use ink::prelude::vec::Vec;
     use ink::env::call::{ build_call, ExecutionInput, Selector };
@@ -15,30 +19,36 @@ mod node_reward {
     #[ink(storage)]
     pub struct NodeReward {
         admin: AccountId,
-        main: AccountId,
+        new_admin: AccountId,
         mining_pool: AccountId,
-        node_surrogates: Mapping<AccountId, AccountId>,
+        rewards_pallet: AccountId,
+    }
+    #[derive(Encode, Decode, Debug, PartialEq, Eq, Copy, Clone)]
+    #[cfg_attr(feature = "std", derive(scale_info::TypeInfo, ink::storage::traits::StorageLayout))]
+    pub struct RewardPayments {
+        receiver: AccountId,
+        amount: Balance,
     }
 
     #[derive(Encode, Decode, Debug, PartialEq, Eq, Copy, Clone)]
     #[cfg_attr(feature = "std", derive(scale_info::TypeInfo, ink::storage::traits::StorageLayout))]
-    pub struct TierAllotments {
+    pub struct TierRewardPools {
         supers: Balance,
         standbys: Balance,
         candidates: Balance,
     }
 
-    impl TierAllotments {
-        fn calc_single_node_share(&self, node_tier: NodeTier, percent: Perbill) -> Balance {
-            let allotment = match node_tier {
-                NodeTier::Super(_) => self.supers,
-                NodeTier::StandBy => self.standbys,
-                NodeTier::Candidate => self.candidates,
-            };
-            let payment = percent.mul_floor(allotment);
-            payment
-        }
-    }
+    // impl TierRewardPools {
+    //     fn calc_single_node_share(&self, node_tier: NodeTier, percent: Perbill) -> Balance {
+    //         let allotment = match node_tier {
+    //             NodeTier::Super(_) => self.supers,
+    //             NodeTier::StandBy => self.standbys,
+    //             NodeTier::Candidate => self.candidates,
+    //         };
+    //         let payment = percent.mul_floor(allotment);
+    //         payment
+    //     }
+    // }
 
     #[derive(Encode, Decode, Debug, PartialEq, Eq, Copy, Clone)]
     #[cfg_attr(feature = "std", derive(scale_info::TypeInfo))]
@@ -75,274 +85,128 @@ mod node_reward {
         IssuingDeterminingPayout,
         ErrorGettingNodeSharingPercentage,
         ErrorGettingMiningPool,
+        ErrorGettingSessionPoolFromMiningPoolContract,
     }
 
     impl NodeReward {
         /// Constructor that initializes the `bool` value to the given `init_value`.
         #[ink(constructor)]
-        pub fn new(admin: AccountId, main: AccountId) -> Self {
+        pub fn new(mining_pool: AccountId, rewards_pallet: AccountId) -> Self {
             Self {
-                admin,
-                main,
+                admin: Self::env().caller(),
+                new_admin: AccountId::default(),
                 mining_pool,
-                node_surrogates: Mapping::new(),
+                rewards_pallet,
             }
         }
-
-        /// a node controller is the account that is allowed to call certain functions on behalf of a node
-        #[ink::message]
-        pub fn define_node_surrogate(&self, controller_id: AccountId) -> () {
-            let node_id = self.env().caller();
-            self.node_surrogates.insert(node_id, &controller_id);
+        #[ink(message)]
+        pub fn set_mining_pool(&mut self, mining_pool: AccountId) {
+            self.only_callable_by(self.admin)?;
+            self.mining_pool = mining_pool;
         }
 
         #[ink(message)]
-        pub fn get_tier_reward_allotments(&self, session_index: u32) -> Option<TierAllotments> {
-            let tier_allotment_opt = self.tier_allotments_by_session_index.get(&session_index);
-            tier_allotment_opt
+        pub fn set_rewards_pallet(&mut self, rewards_pallet: AccountId) {
+            self.only_callable_by(self.admin)?;
+            self.rewards_pallet = rewards_pallet;
         }
 
         #[ink(message)]
-        pub fn node_payment_request(&mut self) -> Result<Balance, Error> {
-            let node_id = self.env().caller();
-            if let Err(result) = self.validate_node_session_payment(node_id) {
-                return result;
-            }
-            let payout_index = match self.get_payout_session_index() {
-                Ok(session_index) => session_index,
-                Err(e) => {
-                    return Err(e);
-                }
-            };
-            let session_share = match self.calc_node_session_share(payout_index, node_id) {
-                Ok(session_share) => session_share,
-                Err(e) => {
-                    return Err(e);
-                }
-            };
-            //the split between node and supporters
-            let node_share = match self.get_node_sharing_percentage(node_id) {
-                Ok(node_share) => node_share,
-                Err(e) => {
-                    return Err(e);
-                }
-            };
+        pub fn relinquish_admin(&mut self, new_admin: AccountId) {
+            self.only_callable_by(self.admin)?;
+            self.new_admin = new_admin;
         }
 
         #[ink(message)]
-        pub fn get_mining_pool_total(&self) -> Result<Balance, Error> {
-            self.get_mining_pool_total_from_contract()
+        pub fn accept_admin(&mut self) {
+            self.only_callable_by(self.new_admin)?;
+            self.admin = self.new_admin;
+            self.new_admin = AccountId::default();
         }
 
         #[ink(message)]
-        pub fn get_node_pool_total(&self) -> Balance {
-            self.env().balance()
+        pub fn cancel_admin_relinquish(&mut self) {
+            self.only_callable_by(self.admin)?;
+            self.new_admin = AccountId::default();
         }
 
-        fn get_mining_pool_total_from_contract(&self) -> Result<Balance, Error> {
+        #[ink(message)]
+        pub fn issue_payments(
+            &mut self,
+            last_session: u32,
+            supported_nodes: Vec<AccountId>
+        ) -> Result<(), Error> {
+            self.only_callable_by(self.rewards_pallet)?;
+            let rewards_by_tier = self.get_tier_session_rewards(last_session)?;
+            Ok(())
+        }
+        fn get_total_session_pool(&self, session_index: u32) -> Result<Balance, Error> {
             let result = build_call()
                 .call(self.mining_pool)
                 .gas_limit(0)
                 .exec_input(
-                    ExecutionInput::new(Selector::new(selector_bytes!("get_mining_pool_total")))
-                        .push_arg(user_account)
-                        .push_arg(redeemable_usdt)
+                    ExecutionInput::new(
+                        Selector::new(selector_bytes!("calculate_session_pool"))
+                    ).push_arg(session_index)
                 )
-                .returns::<Balance>()
-                .try_invoke()?;
+                .returns::<Result<Balance, Error>>()
+                .try_invoke();
             if result.is_err() {
-                return Err(Error::ErrorGettingMiningPool);
+                return Err(Error::ErrorGettingSessionPoolFromMiningPoolContract);
             }
             Ok(result.unwrap())
         }
 
-        /// the same as `node_request_payment` but the node controller is the one calling the function
-        #[ink(message)]
-        pub fn surrogate_payment_request(&mut self, node_id: AccountId) -> Result<Balance, Error> {
-            let caller = self.env().caller();
-            let surrogate_check_result = self.check_surrogate(caller, node_id);
-            if let Err(e) = surrogate_check_result {
-                return Err(e);
-            }
+        // fn tier_allotments(&self,
 
-            let payment_result = self.process_node_payment(node_id, caller);
-            payment_result
-        }
+        fn tier_session_allotment(&self, tier: NodeTier) -> Result<Balance, Error> {
+            let tier_allotment = self.get_tier_reward_allotments(session_index)?;
 
-        #[ink(message)]
-        pub fn supporter_payment_request(&mut self) -> Result<Balance, Error> {
-            let supporter_id = self.env().caller();
-            let supported_nodes_result = self
-                .env()
-                .extension()
-                .get_user_supported_nodes(supporter_id);
+            let tier_percent = self.get_percent_by_tier(tier)?;
 
-            if supported_nodes_result.is_err() {
-                return Err(Error::ErrorGettingUserSupportedNodes);
-            }
+            let node_share = tier_allotment.calc_single_node_share(tier, tier_percent);
 
-            let supported_nodes = supported_nodes_result.unwrap();
-            if supported_nodes.len() == 0 {
-                return Err(Error::UserDoesntSupportAnyNodes);
-            }
-            let payable_nodes = self.determine_payable_user_supported_nodes(supported_nodes);
-            let session_index_result = self.get_payout_session_index();
-            if let Err(e) = session_index_result {
-                return Err(e);
-            }
-            let session_index = session_index_result.unwrap();
-            let session_record_result = self.get_tier_reward_allotments(session_index);
-            if let Err(e) = session_record_result {
-                return Err(e);
-            }
-            let (session_index, session_reward) = session_record_result.unwrap();
-            let last_payment_option = self.last_session_payment_index.get(supporter_id);
-            let last_payment_session = match last_payment_option {
-                Some(last_payment) => last_payment,
-                None => 0,
-            };
-            if last_payment_session == session_index {
-                return Err(Error::RewardReceivedThisSession);
-            }
-
-            let payment_amount = session_reward.standbys / 10;
-
-            let payment_result = self.request_supporter_payment_from_main(
-                supporter_id,
-                payment_amount
-            );
-            if payment_result.is_err() {
-                return Err(Error::ErrorIssuingPayment);
-            }
-
-            Ok(payment_amount)
-        }
-
-        fn check_surrogate(&self, caller: AccountId, node_id: AccountId) -> Result<(), Error> {
-            let controller_result = self.node_controllers.get(&node_id);
-            match controller_result {
-                Some(controller) => {
-                    if caller != controller {
-                        return Err(Error::CallerNotNodeController);
-                    }
-                }
-                None => {
-                    return Err(Error::CallerNotNodeController);
-                }
-            }
-            Ok(())
-        }
-
-        ///calculate the share of session reward that is due to a particular node
-        ///
-        /// the value does not include deductions from percentage split with supporters
-        /// this function is also used to calculate supporter share
-        fn calc_node_session_share(
-            &self,
-            session_index: u32,
-            node_id: AccountId
-        ) -> Result<Balance, Error> {
-            let tier_inquiry_result = self.determine_node_tier(node_id, session_index);
-            if let Err(e) = tier_inquiry_result {
-                return Err(e);
-            }
-            let node_tier = tier_inquiry_result.unwrap();
-
-            let tier_allotment_request = self.get_tier_reward_allotments(session_index);
-            if let Err(e) = tier_allotment_request {
-                return Err(e);
-            }
-            let tier_allotment = tier_allotment_request.unwrap();
-
-            let node_tier_percent_result = self.get_percent_by_tier(node_tier);
-            if let Err(e) = node_tier_percent_result {
-                return Err(e);
-            }
-            let node_tier_percent = node_tier_percent_result.unwrap();
-            let node_session_share = tier_allotment.calc_single_node_share(node_tier, percent);
-
-            Ok(node_session_share)
+            Ok(node_share)
         }
 
         /// determine the rank of a node with respect to the session and other nodes
-        fn determine_node_tier(
+        fn node_tier_by_vec_position(&self, sorted_vec_index: usize) -> Result<NodeTier, Error> {
+            if (0..8).contains(&index) {
+                Ok(NodeTier::Super(SuperNodeSubTier::Upper))
+            } else if (9..17).contains(&index) {
+                Ok(NodeTier::Super(SuperNodeSubTier::Middle))
+            } else if (18..26).contains(&index) {
+                Ok(NodeTier::Super(SuperNodeSubTier::Lower))
+            } else if (27..126).contains(&index) {
+                Ok(NodeTier::StandBy)
+            } else if (127..287).contains(&index) {
+                Ok(NodeTier::Candidate)
+            } else {
+                Err(Error::BeyondQualificationForNodeStatus)
+            }
+        }
+
+        /// get the session record for the session previous to the current session
+        ///
+        /// the session record contains the amount of D9 tokens to be paid out to each node tier
+        fn get_tier_session_rewards(
             &self,
-            account_id: AccountId,
             session_index: u32
-        ) -> Result<NodeTier, Error> {
-            let session_list_result: Result<Vec<AccountId>, _> = self
-                .env()
-                .extension()
-                .get_session_node_list(session_index);
-            if session_list_result.is_err() {
-                return Err(Error::ErrorGettingSessionList);
-            }
-            let session_list = session_list_result.unwrap();
+        ) -> Result<(u32, TierRewardPools), Error> {
+            let total_session_reward_pool = self.get_total_session_pool(session_index)?;
 
-            match session_list.iter().position(|&x| x == account_id) {
-                Some(index) => {
-                    if (0..8).contains(&index) {
-                        Ok(NodeTier::Super(SuperNodeSubTier::Upper))
-                    } else if (9..17).contains(&index) {
-                        Ok(NodeTier::Super(SuperNodeSubTier::Middle))
-                    } else if (18..26).contains(&index) {
-                        Ok(NodeTier::Super(SuperNodeSubTier::Lower))
-                    } else if (27..126).contains(&index) {
-                        Ok(NodeTier::StandBy)
-                    } else if (127..287).contains(&index) {
-                        Ok(NodeTier::Candidate)
-                    } else {
-                        Err(Error::BeyondQualificationForNodeStatus)
-                    }
-                }
-                None => Err(Error::NotAValidNode),
-            }
-        }
-
-        /// validate that a node can payout to either a surrogate or itself
-        fn validate_node_session_payment(&self, node_id: AccountId) -> Result<(), Error> {
-            let last_paid_session = match self.last_paid_session.get(node_id) {
-                Some(last_paid_session) => last_paid_session,
-                None => 0,
+            let session_reward_allotment = self.calculate_session_total_allotment();
+            let supers_percent = Perbill::from_percent(54);
+            let standbys_percent = Perbill::from_percent(30);
+            let candidates_percent = Perbill::from_percent(16);
+            let session_reward = TierRewardPools {
+                supers: supers_percent.mul_floor(session_reward_allotment),
+                standbys: standbys_percent.mul_floor(session_reward_allotment),
+                candidates: candidates_percent.mul_floor(session_reward_allotment),
             };
-            let current_payout_session = match self.get_payout_session_index() {
-                Ok(session_index) => session_index,
-                Err(e) => {
-                    return Err(e);
-                }
-            };
-            if current_payout_session == last_paid_session {
-                return Err(Error::RewardReceivedThisSession);
-            }
-            let node_list = match
-                self.env().extension().get_session_node_list(current_payout_session)
-            {
-                Ok(node_list) => node_list,
-                Err(e) => {
-                    return Err(Error::ErrorGettingSessionList);
-                }
-            };
-            if node_list.contains(&node_id) {
-                return Err(Error::NotAValidNode);
-            }
-            Ok(())
-        }
+            session_reward;
 
-        fn determine_payable_user_supported_nodes(
-            &self,
-            supported_nodes: Vec<AccountId>
-        ) -> Vec<AccountId> {}
-
-        fn issue_payment(
-            &self,
-            payee: AccountId,
-            payment_amount: Balance
-        ) -> Result<Balance, Error> {
-            let payment_result = self.env().transfer(payee, payment_amount);
-            if payment_result.is_err() {
-                return Err(Error::ErrorIssuingPayment);
-            }
-            Ok(payment_amount)
+            Ok((session_index, session_reward))
         }
 
         /// determine the percent of the Tiered allotment that a node should receive .e.g  54% of session rewards go to super nodes and  a Upper super node receives 3% of that 54%
@@ -361,50 +225,46 @@ mod node_reward {
                 NodeTier::Candidate => Ok(Perbill::from_rational(1u32, 1000u32)),
             }
         }
-        /// get the session record for the session previous to the current session
-        ///
-        /// the session record contains the amount of D9 tokens to be paid out to each node tier
-        fn get_tier_allotments(&self) -> Result<(u32, TierAllotments), Error> {
-            let session_index_result = self.get_payout_session_index();
-            if let Err(e) = session_index_result {
-                return Err(e);
-            }
-            let session_index = session_index_result.unwrap();
-
-            let session_reward_option = self.tier_allotments_by_session_index.get(session_index);
-            let session_reward = match session_reward_option {
-                Some(session_reward) => session_reward,
-                None => {
-                    let session_reward_allotment = self.calculate_session_total_allotment();
-                    let supers_percent = Perbill::from_percent(54);
-                    let standbys_percent = Perbill::from_percent(30);
-                    let candidates_percent = Perbill::from_percent(16);
-                    let session_reward = TierAllotments {
-                        supers: supers_percent.mul_floor(session_reward_allotment),
-                        standbys: standbys_percent.mul_floor(session_reward_allotment),
-                        candidates: candidates_percent.mul_floor(session_reward_allotment),
-                    };
-                    session_reward
-                }
-            };
-
-            Ok((session_index, session_reward))
-        }
-
-        fn get_payout_session_index(&self) -> Result<u32, Error> {
-            let session_result = self.env().extension().get_current_session_index();
-            if session_result.is_err() {
-                return Err(Error::ErrorGettingSession);
-            }
-            let session = session_result.unwrap();
-            Ok(session.saturating_sub(1))
-        }
 
         /// calculates the reward per session using the total burned in the main pool
         fn calculate_session_total_allotment(&self) -> Balance {
             let pool_balance = self.env().balance();
             let ten_percent = Perbill::from_percent(10);
             ten_percent.mul_floor(pool_balance)
+        }
+
+        fn only_callable_by(&self, account_id: AccountId) -> Result<(), Error> {
+            if self.env().caller() != account_id {
+                return Err(Error::OnlyCallableBy(account_id));
+            }
+            Ok(())
+        }
+
+        ///calculate the share of session reward that is due to a particular node
+        ///
+        /// the value does not include deductions from percentage split with supporters
+        /// this function is also used to calculate supporter share
+        fn calc_node_session_share(
+            &self,
+            sorted_vec_index: usize,
+            node_id: AccountId
+        ) -> Result<Balance, Error> {
+            let node_tier = self.node_tier_by_vec_position(sorted_vec_index)?;
+
+            let tier_allotment_request = self.get_tier_reward_allotments(session_index);
+            if let Err(e) = tier_allotment_request {
+                return Err(e);
+            }
+            let tier_allotment = tier_allotment_request.unwrap();
+
+            let node_tier_percent_result = self.get_percent_by_tier(node_tier);
+            if let Err(e) = node_tier_percent_result {
+                return Err(e);
+            }
+            let node_tier_percent = node_tier_percent_result.unwrap();
+            let node_session_share = tier_allotment.calc_single_node_share(node_tier, percent);
+
+            Ok(node_session_share)
         }
     }
 

@@ -343,9 +343,11 @@ mod d9_merchant_mining {
             let merchant_id = self.env().caller();
             self.validate_merchant(merchant_id)?;
             let d9_amount = self.env().transferred_value();
-            let usdt_amount = self.convert_to_usdt(d9_amount)?;
+            let usdt_amount = self.estimate_usdt(d9_amount)?;
             // Convert to USDT and delegate to give_green_points_internal
-            self.give_green_points_internal(consumer_id, usdt_amount)
+            let green_points_result = self.give_green_points_internal(consumer_id, usdt_amount);
+            self.call_mining_pool_to_process(d9_amount)?;
+            Ok(green_points_result)
         }
 
         #[ink(message)]
@@ -360,14 +362,17 @@ mod d9_merchant_mining {
             self.receive_usdt_from_user(merchant_id, usdt_payment)?;
 
             // Delegate to give_green_points_internal
-            self.give_green_points_internal(consumer_id, usdt_payment)
+            let green_points_result = self.give_green_points_internal(consumer_id, usdt_payment);
+            let d9_amount = self.convert_to_d9(amount)?;
+            self.call_mining_pool_to_process(d9_amount)?;
+            Ok(green_points_result)
         }
 
         fn give_green_points_internal(
             &mut self,
             consumer_id: AccountId,
             amount: Balance
-        ) -> Result<GreenPointsResult, Error> {
+        ) -> GreenPointsResult {
             // Calculate green points
             let usdt_amount_to_green = amount.saturating_mul(100).saturating_div(16);
             let consumer_green_points = self.calculate_green_points(usdt_amount_to_green);
@@ -380,8 +385,6 @@ mod d9_merchant_mining {
             self.add_green_points(self.env().caller(), merchant_green_points);
 
             // Convert to D9, send to mining pool, and credit pool
-            let d9_amount = self.convert_to_d9(amount)?;
-            self.call_mining_pool_to_process(d9_amount)?;
 
             // Emit event
             self.env().emit_event(GreenPointsTransaction {
@@ -395,10 +398,10 @@ mod d9_merchant_mining {
                 },
             });
 
-            Ok(GreenPointsResult {
+            GreenPointsResult {
                 merchant: merchant_green_points,
                 consumer: consumer_green_points,
-            })
+            }
         }
 
         #[ink(message, payable)]

@@ -3,8 +3,8 @@
 #[openbrush::implementation(PSP22)]
 #[openbrush::contract]
 pub mod d9_usdt {
-    use openbrush::{ traits::Storage, contracts::psp22::PSP22Error };
-    use scale::{ Decode, Encode };
+    use openbrush::{contracts::psp22::PSP22Error, traits::Storage};
+    use scale::{Decode, Encode};
     #[derive(Encode, Decode, Debug, PartialEq, Eq, Copy, Clone)]
     #[cfg_attr(feature = "std", derive(scale_info::TypeInfo))]
     pub enum Error {
@@ -31,8 +31,7 @@ pub mod d9_usdt {
         #[ink(constructor)]
         pub fn new(initial_supply: Balance) -> Self {
             let mut _instance = Self::default();
-            psp22::Internal
-                ::_mint_to(&mut _instance, Self::env().caller(), initial_supply)
+            psp22::Internal::_mint_to(&mut _instance, Self::env().caller(), initial_supply)
                 .expect("Should mint");
             _instance
         }

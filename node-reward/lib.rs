@@ -2,53 +2,27 @@
 /// calculate the share of session reward that is due to a particular node
 /// session rewards are calculated as 10 percent of the accumulation of total burned tokens in the main pool
 /// and total of d9 tokens processed by the merchant contract
-use scale::{ Decode, Encode };
 pub use d9_chain_extension::D9Environment;
 #[ink::contract(env = D9Environment)]
 mod node_reward {
-    use core::result;
-
     use super::*;
-    use ink::primitives::AccountId;
-    use ink::storage::Mapping;
-    use ink::prelude::vec::Vec;
     use ink::env::call::{ build_call, ExecutionInput, Selector };
+    use ink::prelude::vec::Vec;
     use ink::selector_bytes;
-    use scale_info::build;
-    use sp_arithmetic::Perbill;
+    use ink::storage::Mapping;
+    use scale::{ Decode, Encode };
+    use sp_arithmetic::Perquintill;
+
     #[ink(storage)]
     pub struct NodeReward {
         admin: AccountId,
         new_admin: AccountId,
         mining_pool: AccountId,
         rewards_pallet: AccountId,
+        session_rewards: Mapping<u32, Balance>,
+        node_reward: Mapping<AccountId, Balance>,
+        authorized_reward_receiver: Mapping<AccountId, AccountId>,
     }
-    #[derive(Encode, Decode, Debug, PartialEq, Eq, Copy, Clone)]
-    #[cfg_attr(feature = "std", derive(scale_info::TypeInfo, ink::storage::traits::StorageLayout))]
-    pub struct RewardPayments {
-        receiver: AccountId,
-        amount: Balance,
-    }
-
-    #[derive(Encode, Decode, Debug, PartialEq, Eq, Copy, Clone)]
-    #[cfg_attr(feature = "std", derive(scale_info::TypeInfo, ink::storage::traits::StorageLayout))]
-    pub struct TierRewardPools {
-        supers: Balance,
-        standbys: Balance,
-        candidates: Balance,
-    }
-
-    // impl TierRewardPools {
-    //     fn calc_single_node_share(&self, node_tier: NodeTier, percent: Perbill) -> Balance {
-    //         let allotment = match node_tier {
-    //             NodeTier::Super(_) => self.supers,
-    //             NodeTier::StandBy => self.standbys,
-    //             NodeTier::Candidate => self.candidates,
-    //         };
-    //         let payment = percent.mul_floor(allotment);
-    //         payment
-    //     }
-    // }
 
     #[derive(Encode, Decode, Debug, PartialEq, Eq, Copy, Clone)]
     #[cfg_attr(feature = "std", derive(scale_info::TypeInfo))]
@@ -70,22 +44,20 @@ mod node_reward {
     #[cfg_attr(feature = "std", derive(scale_info::TypeInfo))]
     pub enum Error {
         OnlyCallableBy(AccountId),
-        IssueGettingValidatorsOrCandidates,
-        ErrorGettingSession,
-        PaymentWouldExceedAllotment,
-        NotASuperNode,
-        NotAValidNode,
         BeyondQualificationForNodeStatus,
         ErrorIssuingPayment,
-        RewardReceivedThisSession,
-        ErrorGettingSessionList,
-        ErrorGettingUserSupportedNodes,
-        UserDoesntSupportAnyNodes,
-        CallerNotNodeController,
-        IssuingDeterminingPayout,
-        ErrorGettingNodeSharingPercentage,
-        ErrorGettingMiningPool,
         ErrorGettingSessionPoolFromMiningPoolContract,
+        NotAuthorizedToWithdraw,
+        NothingToWithdraw,
+    }
+    #[ink(event)]
+    pub struct NodeRewardPaid {
+        #[ink(topic)]
+        node: AccountId,
+        #[ink(topic)]
+        receiver: AccountId,
+        #[ink(topic)]
+        amount: Balance,
     }
 
     impl NodeReward {
@@ -94,83 +66,199 @@ mod node_reward {
         pub fn new(mining_pool: AccountId, rewards_pallet: AccountId) -> Self {
             Self {
                 admin: Self::env().caller(),
-                new_admin: AccountId::default(),
+                new_admin: [0u8; 32].into(),
                 mining_pool,
                 rewards_pallet,
+                session_rewards: Mapping::new(),
+                node_reward: Mapping::new(),
+                authorized_reward_receiver: Mapping::new(),
             }
         }
-        #[ink(message)]
-        pub fn set_mining_pool(&mut self, mining_pool: AccountId) {
-            self.only_callable_by(self.admin)?;
-            self.mining_pool = mining_pool;
-        }
 
-        #[ink(message)]
-        pub fn set_rewards_pallet(&mut self, rewards_pallet: AccountId) {
-            self.only_callable_by(self.admin)?;
-            self.rewards_pallet = rewards_pallet;
-        }
-
-        #[ink(message)]
-        pub fn relinquish_admin(&mut self, new_admin: AccountId) {
-            self.only_callable_by(self.admin)?;
-            self.new_admin = new_admin;
-        }
-
-        #[ink(message)]
-        pub fn accept_admin(&mut self) {
-            self.only_callable_by(self.new_admin)?;
-            self.admin = self.new_admin;
-            self.new_admin = AccountId::default();
-        }
-
-        #[ink(message)]
-        pub fn cancel_admin_relinquish(&mut self) {
-            self.only_callable_by(self.admin)?;
-            self.new_admin = AccountId::default();
-        }
-
-        #[ink(message)]
-        pub fn issue_payments(
-            &mut self,
-            last_session: u32,
-            supported_nodes: Vec<AccountId>
-        ) -> Result<(), Error> {
-            self.only_callable_by(self.rewards_pallet)?;
-            let rewards_by_tier = self.get_tier_session_rewards(last_session)?;
+        fn only_callable_by(&self, account_id: AccountId) -> Result<(), Error> {
+            if self.env().caller() != account_id {
+                return Err(Error::OnlyCallableBy(account_id));
+            }
             Ok(())
         }
-        fn get_total_session_pool(&self, session_index: u32) -> Result<Balance, Error> {
-            let result = build_call()
+
+        #[ink(message)]
+        pub fn set_mining_pool(&mut self, mining_pool: AccountId) -> Result<(), Error> {
+            self.only_callable_by(self.admin)?;
+            self.mining_pool = mining_pool;
+            Ok(())
+        }
+
+        #[ink(message)]
+        pub fn set_rewards_pallet(&mut self, rewards_pallet: AccountId) -> Result<(), Error> {
+            self.only_callable_by(self.admin)?;
+            self.rewards_pallet = rewards_pallet;
+            Ok(())
+        }
+
+        #[ink(message)]
+        pub fn relinquish_admin(&mut self, new_admin: AccountId) -> Result<(), Error> {
+            self.only_callable_by(self.admin)?;
+            self.new_admin = new_admin;
+            Ok(())
+        }
+
+        #[ink(message)]
+        pub fn accept_admin(&mut self) -> Result<(), Error> {
+            self.only_callable_by(self.new_admin)?;
+            self.admin = self.new_admin;
+            self.new_admin = [0u8; 32].into();
+            Ok(())
+        }
+
+        #[ink(message)]
+        pub fn cancel_admin_relinquish(&mut self) -> Result<(), Error> {
+            self.only_callable_by(self.admin)?;
+            self.new_admin = [0u8; 32].into();
+            Ok(())
+        }
+
+        #[ink(message)]
+        pub fn withdraw_reward(
+            &mut self,
+            node_id: AccountId,
+            receiver: AccountId
+        ) -> Result<(), Error> {
+            let caller = self.env().caller();
+            let _ = self.validate_withdraw(node_id, caller)?;
+            let reward_balance = self.node_reward.get(&node_id).unwrap_or(0);
+            if reward_balance == 0 {
+                return Err(Error::NothingToWithdraw);
+            }
+            let payment_request_result = self.tell_mining_pool_to_pay(receiver, reward_balance);
+            if payment_request_result.is_err() {
+                return Err(Error::ErrorIssuingPayment);
+            }
+            let _ = self.deduct_node_reward(node_id)?;
+            self.env().emit_event(NodeRewardPaid {
+                node: node_id,
+                receiver,
+                amount: reward_balance,
+            });
+            Ok(())
+        }
+
+        #[ink(message)]
+        pub fn get_session_rewards_data(&self, session_index: u32) -> Option<Balance> {
+            self.session_rewards.get(&session_index)
+        }
+
+        #[ink(message)]
+        pub fn get_node_reward_data(&self, node_id: AccountId) -> Option<Balance> {
+            self.node_reward.get(node_id)
+        }
+
+        #[ink(message)]
+        pub fn get_authorized_receiver(&self, node_id: AccountId) -> AccountId {
+            match self.authorized_reward_receiver.get(node_id) {
+                Some(receiver) => receiver,
+                None => node_id,
+            }
+        }
+
+        #[ink(message)]
+        pub fn update_rewards(
+            &mut self,
+            last_session: u32,
+            sorted_nodes: Vec<AccountId>
+        ) -> Result<(), Error> {
+            self.only_callable_by(self.rewards_pallet)?;
+            let mut nodes: Vec<AccountId> = sorted_nodes.clone();
+            let reward_pool = self.get_reward_pool(last_session)?;
+            if reward_pool < 1_000_000_000_000 {
+                return Ok(());
+            }
+            if nodes.len() > 288 {
+                nodes.truncate(288);
+            }
+            for (index, node) in nodes.iter().enumerate() {
+                let get_node_tier_result = self.node_tier_by_vec_position(index);
+                if get_node_tier_result.is_err() {
+                    continue;
+                }
+                let node_tier = get_node_tier_result.unwrap();
+                let node_share = self.calc_single_node_share(reward_pool, node_tier);
+                let _ = self.credit_node_reward(*node, node_share)?;
+            }
+
+            self.session_rewards.insert(last_session, &reward_pool);
+            Ok(())
+        }
+
+        fn validate_withdraw(&self, node_id: AccountId, requester: AccountId) -> Result<(), Error> {
+            let authorized_receiver = self.authorized_reward_receiver.get(&node_id);
+            match authorized_receiver {
+                Some(authorized_receiver) => {
+                    if authorized_receiver != requester {
+                        return Err(Error::NotAuthorizedToWithdraw);
+                    }
+                }
+                None => {
+                    if requester != node_id {
+                        return Err(Error::NotAuthorizedToWithdraw);
+                    }
+                }
+            }
+            Ok(())
+        }
+
+        fn credit_node_reward(
+            &mut self,
+            node_id: AccountId,
+            balance_increase: Balance
+        ) -> Result<(), Error> {
+            let node_reward_balance: Balance = self.node_reward.get(&node_id).unwrap_or(0);
+            let new_balance: Balance = node_reward_balance.saturating_add(balance_increase);
+            self.node_reward.insert(node_id, &new_balance);
+            Ok(())
+        }
+
+        fn deduct_node_reward(&mut self, node_id: AccountId) -> Result<(), Error> {
+            self.node_reward.insert(node_id, &0);
+            Ok(())
+        }
+
+        fn tell_mining_pool_to_pay(
+            &self,
+            receiver: AccountId,
+            amount: Balance
+        ) -> Result<(), Error> {
+            build_call::<D9Environment>()
+                .call(self.mining_pool)
+                .gas_limit(0)
+                .exec_input(
+                    ExecutionInput::new(Selector::new(selector_bytes!("pay_node_reward")))
+                        .push_arg(receiver)
+                        .push_arg(amount)
+                )
+                .returns::<Result<(), Error>>()
+                .invoke()
+        }
+
+        fn get_session_pool(&self, session_index: u32) -> Result<Balance, Error> {
+            let result = build_call::<D9Environment>()
                 .call(self.mining_pool)
                 .gas_limit(0)
                 .exec_input(
                     ExecutionInput::new(
-                        Selector::new(selector_bytes!("calculate_session_pool"))
+                        Selector::new(selector_bytes!("save_session_volume_and_get_delta"))
                     ).push_arg(session_index)
                 )
                 .returns::<Result<Balance, Error>>()
-                .try_invoke();
+                .invoke();
             if result.is_err() {
                 return Err(Error::ErrorGettingSessionPoolFromMiningPoolContract);
             }
             Ok(result.unwrap())
         }
 
-        // fn tier_allotments(&self,
-
-        fn tier_session_allotment(&self, tier: NodeTier) -> Result<Balance, Error> {
-            let tier_allotment = self.get_tier_reward_allotments(session_index)?;
-
-            let tier_percent = self.get_percent_by_tier(tier)?;
-
-            let node_share = tier_allotment.calc_single_node_share(tier, tier_percent);
-
-            Ok(node_share)
-        }
-
         /// determine the rank of a node with respect to the session and other nodes
-        fn node_tier_by_vec_position(&self, sorted_vec_index: usize) -> Result<NodeTier, Error> {
+        fn node_tier_by_vec_position(&self, index: usize) -> Result<NodeTier, Error> {
             if (0..8).contains(&index) {
                 Ok(NodeTier::Super(SuperNodeSubTier::Upper))
             } else if (9..17).contains(&index) {
@@ -186,85 +274,41 @@ mod node_reward {
             }
         }
 
-        /// get the session record for the session previous to the current session
-        ///
-        /// the session record contains the amount of D9 tokens to be paid out to each node tier
-        fn get_tier_session_rewards(
-            &self,
-            session_index: u32
-        ) -> Result<(u32, TierRewardPools), Error> {
-            let total_session_reward_pool = self.get_total_session_pool(session_index)?;
+        fn get_reward_pool(&self, session_index: u32) -> Result<Balance, Error> {
+            let session_pool = self.get_session_pool(session_index)?;
+            let ten_percent = Perquintill::from_percent(10);
+            let reward_pool = ten_percent.mul_floor(session_pool);
 
-            let session_reward_allotment = self.calculate_session_total_allotment();
-            let supers_percent = Perbill::from_percent(54);
-            let standbys_percent = Perbill::from_percent(30);
-            let candidates_percent = Perbill::from_percent(16);
-            let session_reward = TierRewardPools {
-                supers: supers_percent.mul_floor(session_reward_allotment),
-                standbys: standbys_percent.mul_floor(session_reward_allotment),
-                candidates: candidates_percent.mul_floor(session_reward_allotment),
-            };
-            session_reward;
-
-            Ok((session_index, session_reward))
+            Ok(reward_pool)
         }
 
-        /// determine the percent of the Tiered allotment that a node should receive .e.g  54% of session rewards go to super nodes and  a Upper super node receives 3% of that 54%
-        #[ink(message)]
-        pub fn get_percent_by_tier(&self, node_tier: NodeTier) -> Result<Perbill, Error> {
-            match node_tier {
+        fn calc_single_node_share(&self, reward_pool: Balance, node_tier: NodeTier) -> Balance {
+            let node_percent = match node_tier {
                 NodeTier::Super(super_node_sub_tier) => {
                     let percent = match super_node_sub_tier {
                         SuperNodeSubTier::Upper => 3,
                         SuperNodeSubTier::Middle => 2,
                         SuperNodeSubTier::Lower => 1,
                     };
-                    Ok(Perbill::from_percent(percent))
+                    Perquintill::from_percent(percent)
                 }
-                NodeTier::StandBy => Ok(Perbill::from_rational(3u32, 1000u32)),
-                NodeTier::Candidate => Ok(Perbill::from_rational(1u32, 1000u32)),
-            }
+                NodeTier::StandBy => Perquintill::from_rational(3u64, 1000u64),
+                NodeTier::Candidate => Perquintill::from_rational(1u64, 1000u64),
+            };
+
+            node_percent.mul_floor(reward_pool)
         }
 
-        /// calculates the reward per session using the total burned in the main pool
-        fn calculate_session_total_allotment(&self) -> Balance {
-            let pool_balance = self.env().balance();
-            let ten_percent = Perbill::from_percent(10);
-            ten_percent.mul_floor(pool_balance)
-        }
-
-        fn only_callable_by(&self, account_id: AccountId) -> Result<(), Error> {
-            if self.env().caller() != account_id {
-                return Err(Error::OnlyCallableBy(account_id));
-            }
-            Ok(())
-        }
-
-        ///calculate the share of session reward that is due to a particular node
-        ///
-        /// the value does not include deductions from percentage split with supporters
-        /// this function is also used to calculate supporter share
-        fn calc_node_session_share(
-            &self,
-            sorted_vec_index: usize,
-            node_id: AccountId
-        ) -> Result<Balance, Error> {
-            let node_tier = self.node_tier_by_vec_position(sorted_vec_index)?;
-
-            let tier_allotment_request = self.get_tier_reward_allotments(session_index);
-            if let Err(e) = tier_allotment_request {
-                return Err(e);
-            }
-            let tier_allotment = tier_allotment_request.unwrap();
-
-            let node_tier_percent_result = self.get_percent_by_tier(node_tier);
-            if let Err(e) = node_tier_percent_result {
-                return Err(e);
-            }
-            let node_tier_percent = node_tier_percent_result.unwrap();
-            let node_session_share = tier_allotment.calc_single_node_share(node_tier, percent);
-
-            Ok(node_session_share)
+        #[ink(message)]
+        pub fn set_code(&mut self, code_hash: [u8; 32]) {
+            let caller = self.env().caller();
+            assert!(caller == self.admin, "Only admin can set code hash.");
+            ink::env
+                ::set_code_hash(&code_hash)
+                .unwrap_or_else(|err| {
+                    panic!("Failed to `set_code_hash` to {:?} due to {:?}", code_hash, err)
+                });
+            ink::env::debug_println!("Switched code hash to {:?}.", code_hash);
         }
     }
 

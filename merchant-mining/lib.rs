@@ -5,13 +5,13 @@ pub use d9_chain_extension::D9Environment;
 #[ink::contract(env = D9Environment)]
 mod d9_merchant_mining {
     use super::*;
-    use scale::{ Decode, Encode };
-    use ink::storage::Mapping;
-    use sp_arithmetic::Perbill;
-    use ink::prelude::vec::Vec;
-    use ink::env::call::{ build_call, ExecutionInput, Selector };
+    use ink::env::call::{build_call, ExecutionInput, Selector};
     use ink::env::Error as EnvError;
+    use ink::prelude::vec::Vec;
     use ink::selector_bytes;
+    use ink::storage::Mapping;
+    use scale::{Decode, Encode};
+    use sp_arithmetic::Perbill;
 
     #[ink(storage)]
     pub struct D9MerchantMining {
@@ -32,7 +32,13 @@ mod d9_merchant_mining {
     #[derive(Decode, Encode)]
     #[cfg_attr(
         feature = "std",
-        derive(Debug, PartialEq, Eq, ink::storage::traits::StorageLayout, scale_info::TypeInfo)
+        derive(
+            Debug,
+            PartialEq,
+            Eq,
+            ink::storage::traits::StorageLayout,
+            scale_info::TypeInfo
+        )
     )]
     pub struct Account {
         //green points => red points  Δ =  0.005 % / day
@@ -74,7 +80,13 @@ mod d9_merchant_mining {
     #[derive(Decode, Encode)]
     #[cfg_attr(
         feature = "std",
-        derive(Debug, PartialEq, Eq, ink::storage::traits::StorageLayout, scale_info::TypeInfo)
+        derive(
+            Debug,
+            PartialEq,
+            Eq,
+            ink::storage::traits::StorageLayout,
+            scale_info::TypeInfo
+        )
     )]
     pub struct GreenPointsResult {
         merchant: Balance,
@@ -176,7 +188,7 @@ mod d9_merchant_mining {
         pub fn new(
             amm_contract: AccountId,
             mining_pool: AccountId,
-            usdt_contract: AccountId
+            usdt_contract: AccountId,
         ) -> Self {
             Self {
                 admin: Self::env().caller(),
@@ -225,7 +237,7 @@ mod d9_merchant_mining {
         fn update_subscription(
             &mut self,
             account_id: AccountId,
-            amount: Balance
+            amount: Balance,
         ) -> Result<Timestamp, Error> {
             let months = amount.saturating_div(self.subscription_fee) as Timestamp;
             if months == 0 {
@@ -267,22 +279,18 @@ mod d9_merchant_mining {
             //calculate green => red points conversion
             let last_redeem_timestamp = account.last_conversion.unwrap_or(account.created_at);
 
-            let time_based_red_points = self.calculate_red_points_from_time(
-                account.green_points,
-                last_redeem_timestamp
-            );
+            let time_based_red_points =
+                self.calculate_red_points_from_time(account.green_points, last_redeem_timestamp);
 
             if time_based_red_points == 0 {
                 return Err(Error::NothingToRedeem);
             }
 
-            let relationship_based_red_points = self.calculate_red_points_from_relationships(
-                account.relationship_factors
-            );
+            let relationship_based_red_points =
+                self.calculate_red_points_from_relationships(account.relationship_factors);
 
-            let total_red_points = time_based_red_points.saturating_add(
-                relationship_based_red_points
-            );
+            let total_red_points =
+                time_based_red_points.saturating_add(relationship_based_red_points);
             if total_red_points == 0 {
                 return Err(Error::NothingToRedeem);
             }
@@ -320,7 +328,7 @@ mod d9_merchant_mining {
         fn mining_pool_redeem(
             &self,
             user_account: AccountId,
-            redeemable_usdt: Balance
+            redeemable_usdt: Balance,
         ) -> Result<Balance, Error> {
             let result = build_call::<D9Environment>()
                 .call(self.mining_pool)
@@ -328,7 +336,7 @@ mod d9_merchant_mining {
                 .exec_input(
                     ExecutionInput::new(Selector::new(selector_bytes!("merchant_user_redeem_d9")))
                         .push_arg(user_account)
-                        .push_arg(redeemable_usdt)
+                        .push_arg(redeemable_usdt),
                 )
                 .returns::<Result<Balance, Error>>()
                 .try_invoke()?;
@@ -338,7 +346,7 @@ mod d9_merchant_mining {
         #[ink(message, payable)]
         pub fn give_green_points_d9(
             &mut self,
-            consumer_id: AccountId
+            consumer_id: AccountId,
         ) -> Result<GreenPointsResult, Error> {
             let merchant_id = self.env().caller();
             self.validate_merchant(merchant_id)?;
@@ -354,7 +362,7 @@ mod d9_merchant_mining {
         pub fn give_green_points_usdt(
             &mut self,
             consumer_id: AccountId,
-            usdt_payment: Balance
+            usdt_payment: Balance,
         ) -> Result<GreenPointsResult, Error> {
             let merchant_id = self.env().caller();
             self.validate_merchant(merchant_id)?;
@@ -371,14 +379,13 @@ mod d9_merchant_mining {
         fn give_green_points_internal(
             &mut self,
             consumer_id: AccountId,
-            amount: Balance
+            amount: Balance,
         ) -> GreenPointsResult {
             // Calculate green points
             let usdt_amount_to_green = amount.saturating_mul(100).saturating_div(16);
             let consumer_green_points = self.calculate_green_points(usdt_amount_to_green);
-            let merchant_green_points = Perbill::from_rational(16u32, 100u32).mul_floor(
-                consumer_green_points
-            );
+            let merchant_green_points =
+                Perbill::from_rational(16u32, 100u32).mul_floor(consumer_green_points);
 
             // Update accounts
             self.add_green_points(consumer_id, consumer_green_points);
@@ -408,7 +415,7 @@ mod d9_merchant_mining {
         pub fn send_usdt_payment_to_merchant(
             &mut self,
             merchant_id: AccountId,
-            usdt_amount: Balance
+            usdt_amount: Balance,
         ) -> Result<GreenPointsResult, Error> {
             let consumer_id = self.env().caller();
             let _ = self.validate_merchant(merchant_id)?;
@@ -422,7 +429,7 @@ mod d9_merchant_mining {
         #[ink(message, payable)]
         pub fn send_d9_payment_to_merchant(
             &mut self,
-            merchant_id: AccountId
+            merchant_id: AccountId,
         ) -> Result<GreenPointsResult, Error> {
             let payer = self.env().caller();
             let d9_amount = self.env().transferred_value();
@@ -447,7 +454,7 @@ mod d9_merchant_mining {
             &mut self,
             consumer_id: AccountId,
             merchant_id: AccountId,
-            usdt_amount: Balance
+            usdt_amount: Balance,
         ) -> Result<GreenPointsResult, Error> {
             //send usdt to merchant
             let eighty_four_percent = Perbill::from_rational(84u32, 100u32);
@@ -531,11 +538,12 @@ mod d9_merchant_mining {
         pub fn set_code(&mut self, code_hash: [u8; 32]) {
             let caller = self.env().caller();
             assert!(caller == self.admin, "Only admin can set code hash.");
-            ink::env
-                ::set_code_hash(&code_hash)
-                .unwrap_or_else(|err| {
-                    panic!("Failed to `set_code_hash` to {:?} due to {:?}", code_hash, err)
-                });
+            ink::env::set_code_hash(&code_hash).unwrap_or_else(|err| {
+                panic!(
+                    "Failed to `set_code_hash` to {:?} due to {:?}",
+                    code_hash, err
+                )
+            });
             ink::env::debug_println!("Switched code hash to {:?}.", code_hash);
         }
 
@@ -554,15 +562,14 @@ mod d9_merchant_mining {
         fn validate_usdt_balance(
             &self,
             account_id: AccountId,
-            amount: Balance
+            amount: Balance,
         ) -> Result<(), Error> {
             let usdt_balance = build_call::<D9Environment>()
                 .call(self.usdt_contract)
                 .gas_limit(0)
                 .exec_input(
-                    ExecutionInput::new(
-                        Selector::new(selector_bytes!("PSP22::balance_of"))
-                    ).push_arg(account_id)
+                    ExecutionInput::new(Selector::new(selector_bytes!("PSP22::balance_of")))
+                        .push_arg(account_id),
                 )
                 .returns::<Balance>()
                 .invoke();
@@ -575,7 +582,7 @@ mod d9_merchant_mining {
         pub fn validate_usdt_allowance(
             &self,
             owner: AccountId,
-            amount: Balance
+            amount: Balance,
         ) -> Result<(), Error> {
             let allowance = build_call::<D9Environment>()
                 .call(self.usdt_contract)
@@ -583,7 +590,7 @@ mod d9_merchant_mining {
                 .exec_input(
                     ExecutionInput::new(Selector::new(selector_bytes!("PSP22::allowance")))
                         .push_arg(owner)
-                        .push_arg(self.env().account_id())
+                        .push_arg(self.env().account_id()),
                 )
                 .returns::<Balance>()
                 .invoke();
@@ -619,7 +626,7 @@ mod d9_merchant_mining {
         fn contract_sends_usdt_to(
             &self,
             recipient: AccountId,
-            amount: Balance
+            amount: Balance,
         ) -> Result<(), Error> {
             build_call::<D9Environment>()
                 .call(self.usdt_contract)
@@ -628,7 +635,7 @@ mod d9_merchant_mining {
                     ExecutionInput::new(Selector::new(selector_bytes!("PSP22::transfer")))
                         .push_arg(recipient)
                         .push_arg(amount)
-                        .push_arg([0u8])
+                        .push_arg([0u8]),
                 )
                 .returns::<Result<(), Error>>()
                 .invoke()
@@ -637,7 +644,7 @@ mod d9_merchant_mining {
         pub fn receive_usdt_from_user(
             &self,
             sender: AccountId,
-            amount: Balance
+            amount: Balance,
         ) -> Result<(), Error> {
             build_call::<D9Environment>()
                 .call(self.usdt_contract)
@@ -647,7 +654,7 @@ mod d9_merchant_mining {
                         .push_arg(sender)
                         .push_arg(self.env().account_id())
                         .push_arg(amount)
-                        .push_arg([0u8])
+                        .push_arg([0u8]),
                 )
                 .returns::<Result<(), Error>>()
                 .invoke()
@@ -663,7 +670,7 @@ mod d9_merchant_mining {
                 .exec_input(
                     ExecutionInput::new(Selector::new(selector_bytes!("PSP22::approve")))
                         .push_arg(self.amm_contract)
-                        .push_arg(amount)
+                        .push_arg(amount),
                 )
                 .returns::<Result<(), Error>>()
                 .try_invoke()?;
@@ -676,7 +683,7 @@ mod d9_merchant_mining {
                 .call(self.amm_contract)
                 .gas_limit(0)
                 .exec_input(
-                    ExecutionInput::new(Selector::new(selector_bytes!("get_d9"))).push_arg(amount)
+                    ExecutionInput::new(Selector::new(selector_bytes!("get_d9"))).push_arg(amount),
                 )
                 .returns::<Result<Balance, Error>>()
                 .try_invoke()?;
@@ -690,7 +697,9 @@ mod d9_merchant_mining {
                 .call(self.amm_contract)
                 .gas_limit(0)
                 .transferred_value(amount)
-                .exec_input(ExecutionInput::new(Selector::new(selector_bytes!("get_usdt"))))
+                .exec_input(ExecutionInput::new(Selector::new(selector_bytes!(
+                    "get_usdt"
+                ))))
                 .returns::<Result<Balance, Error>>()
                 .try_invoke()?;
             result.unwrap()
@@ -705,7 +714,7 @@ mod d9_merchant_mining {
                 .exec_input(
                     ExecutionInput::new(Selector::new(selector_bytes!("estimate_exchange")))
                         .push_arg(direction)
-                        .push_arg(amount)
+                        .push_arg(amount),
                 )
                 .returns::<Result<(Balance, Balance), Error>>()
                 .try_invoke();
@@ -752,16 +761,16 @@ mod d9_merchant_mining {
         fn calculate_red_points_from_time(
             &self,
             green_points: Balance,
-            last_redeem_timestamp: Timestamp
+            last_redeem_timestamp: Timestamp,
         ) -> Balance {
             // rate green points => red points
             let transmutation_rate = Perbill::from_rational(1u32, 2000u32);
 
-            let days_since_last_redeem = self
-                .env()
-                .block_timestamp()
-                .saturating_sub(last_redeem_timestamp)
-                .saturating_div(self.milliseconds_day) as Balance;
+            let days_since_last_redeem =
+                self.env()
+                    .block_timestamp()
+                    .saturating_sub(last_redeem_timestamp)
+                    .saturating_div(self.milliseconds_day) as Balance;
 
             let base_red_points = transmutation_rate
                 .mul_floor(green_points)
@@ -776,9 +785,11 @@ mod d9_merchant_mining {
         fn calculate_red_points_from_relationships(
             &self,
             // red_points: Balance,
-            referral_coefficients: (Balance, Balance)
+            referral_coefficients: (Balance, Balance),
         ) -> Balance {
-            let total_red_points = referral_coefficients.0.saturating_add(referral_coefficients.1);
+            let total_red_points = referral_coefficients
+                .0
+                .saturating_add(referral_coefficients.1);
             total_red_points
         }
 
@@ -788,11 +799,9 @@ mod d9_merchant_mining {
                 .call(self.mining_pool)
                 .gas_limit(0) // replace with an appropriate gas limit
                 .transferred_value(amount)
-                .exec_input(
-                    ExecutionInput::new(
-                        Selector::new(ink::selector_bytes!("process_merchant_payment"))
-                    )
-                )
+                .exec_input(ExecutionInput::new(Selector::new(ink::selector_bytes!(
+                    "process_merchant_payment"
+                ))))
                 .returns::<Result<(), Error>>()
                 .try_invoke()?;
             Ok(())
@@ -807,7 +816,8 @@ mod d9_merchant_mining {
         }
 
         fn add_green_points(&mut self, account_id: AccountId, amount: Balance) {
-            let mut account = self.accounts
+            let mut account = self
+                .accounts
                 .get(&account_id)
                 .unwrap_or(Account::new(self.env().block_timestamp()));
             account.green_points = account.green_points.saturating_add(amount);
@@ -817,7 +827,7 @@ mod d9_merchant_mining {
         fn update_ancestors_coefficients(
             &mut self,
             ancestors: &[AccountId],
-            withdraw_amount: Balance
+            withdraw_amount: Balance,
         ) {
             //modify parent
             let parent = ancestors.first();
@@ -837,8 +847,10 @@ mod d9_merchant_mining {
                 if let Some(mut account) = self.accounts.get(ancestor) {
                     let one_percent = Perbill::from_rational(1u32, 100u32);
                     let ancestor_bonus: Balance = one_percent.mul_floor(withdraw_amount);
-                    account.relationship_factors.1 =
-                        account.relationship_factors.1.saturating_add(ancestor_bonus);
+                    account.relationship_factors.1 = account
+                        .relationship_factors
+                        .1
+                        .saturating_add(ancestor_bonus);
                     account.relationship_factors = account.relationship_factors;
                     self.accounts.insert(ancestor, &account);
                 }
@@ -855,13 +867,14 @@ mod d9_merchant_mining {
 
         /// Imports all the definitions from the outer scope so we can use them here.
         use super::*;
+        use ink::env::test::{set_caller, set_value_transferred};
         use ink::env::DefaultEnvironment;
-        use ink::env::test::{ set_value_transferred, set_caller };
         static ONE_MONTH_MILLISECONDS: Timestamp = 86_400_000 * 30;
 
         /// prepare default accounts and contract address for tests
         fn init_accounts() -> ink::env::test::DefaultAccounts<ink::env::DefaultEnvironment> {
-            let default_accounts: ink::env::test::DefaultAccounts<ink::env::DefaultEnvironment> = ink::env::test::default_accounts::<ink::env::DefaultEnvironment>();
+            let default_accounts: ink::env::test::DefaultAccounts<ink::env::DefaultEnvironment> =
+                ink::env::test::default_accounts::<ink::env::DefaultEnvironment>();
             default_accounts
         }
 
@@ -885,7 +898,7 @@ mod d9_merchant_mining {
             let contract = D9MerchantMining::new(
                 default_accounts.alice,
                 default_accounts.bob,
-                default_accounts.charlie
+                default_accounts.charlie,
             );
             (default_accounts, contract)
         }
@@ -901,7 +914,7 @@ mod d9_merchant_mining {
             let current_block_time: Timestamp =
                 ink::env::block_timestamp::<ink::env::DefaultEnvironment>();
             let _ = ink::env::test::set_block_timestamp::<ink::env::DefaultEnvironment>(
-                current_block_time + move_forward_by
+                current_block_time + move_forward_by,
             );
             let _ = ink::env::test::advance_block::<ink::env::DefaultEnvironment>();
         }
@@ -942,7 +955,7 @@ mod d9_merchant_mining {
         /// Imports all the definitions from the outer scope so we can use them here.
         use super::*;
         /// A helper function used for calling contract messages.
-        use ink_e2e::{ build_message, account_id, AccountKeyring };
+        use ink_e2e::{account_id, build_message, AccountKeyring};
         use mining_pool::mining_pool::MiningPool;
         use mining_pool::mining_pool::MiningPoolRef;
         /// The End-to-End test `Result` type.
@@ -954,7 +967,7 @@ mod d9_merchant_mining {
             let constructor = D9MerchantMiningRef::new(
                 client.alice().account_id,
                 client.bob().account_id,
-                client.charlie().account_id
+                client.charlie().account_id,
             );
 
             Ok(())

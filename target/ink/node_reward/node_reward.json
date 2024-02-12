@@ -1,6 +1,6 @@
 {
   "source": {
-    "hash": "0xbc5f09218dffea5d6df6ad24bf54fb56d0823665051a689064f3e91337c1b55e",
+    "hash": "0x99b3471883f613d3f26ad8adb42779745f7c80999f553b86e89b9cdafded85ba",
     "language": "ink! 4.3.0",
     "compiler": "rustc 1.72.0",
     "build_info": {
@@ -14,10 +14,10 @@
     }
   },
   "contract": {
-    "name": "mining_pool",
+    "name": "node_reward",
     "version": "0.1.0",
     "authors": [
-      "D9"
+      "[your_name] <[your_email]>"
     ]
   },
   "spec": {
@@ -25,7 +25,7 @@
       {
         "args": [
           {
-            "label": "main_contract",
+            "label": "mining_pool",
             "type": {
               "displayName": [
                 "AccountId"
@@ -34,25 +34,7 @@
             }
           },
           {
-            "label": "merchant_contract",
-            "type": {
-              "displayName": [
-                "AccountId"
-              ],
-              "type": 0
-            }
-          },
-          {
-            "label": "node_reward_contract",
-            "type": {
-              "displayName": [
-                "AccountId"
-              ],
-              "type": 0
-            }
-          },
-          {
-            "label": "amm_contract",
+            "label": "rewards_pallet",
             "type": {
               "displayName": [
                 "AccountId"
@@ -72,7 +54,7 @@
             "ink_primitives",
             "ConstructorResult"
           ],
-          "type": 5
+          "type": 4
         },
         "selector": "0x9bae9d5e"
       }
@@ -95,41 +77,35 @@
         "displayName": [
           "BlockNumber"
         ],
-        "type": 4
+        "type": 10
       },
       "chainExtension": {
         "displayName": [
           "ChainExtension"
         ],
-        "type": 16
+        "type": 17
       },
       "hash": {
         "displayName": [
           "Hash"
         ],
-        "type": 14
+        "type": 15
       },
       "maxEventTopics": 4,
       "timestamp": {
         "displayName": [
           "Timestamp"
         ],
-        "type": 15
+        "type": 16
       }
     },
-    "events": [],
-    "lang_error": {
-      "displayName": [
-        "ink",
-        "LangError"
-      ],
-      "type": 7
-    },
-    "messages": [
+    "events": [
       {
         "args": [
           {
-            "label": "account_id",
+            "docs": [],
+            "indexed": true,
+            "label": "node",
             "type": {
               "displayName": [
                 "AccountId"
@@ -138,6 +114,19 @@
             }
           },
           {
+            "docs": [],
+            "indexed": true,
+            "label": "receiver",
+            "type": {
+              "displayName": [
+                "AccountId"
+              ],
+              "type": 0
+            }
+          },
+          {
+            "docs": [],
+            "indexed": true,
             "label": "amount",
             "type": {
               "displayName": [
@@ -147,77 +136,59 @@
             }
           }
         ],
-        "default": false,
         "docs": [],
-        "label": "pay_node_reward",
-        "mutates": true,
-        "payable": false,
-        "returnType": {
-          "displayName": [
-            "ink",
-            "MessageResult"
-          ],
-          "type": 8
-        },
-        "selector": "0x2f0dd006"
-      },
-      {
-        "args": [],
-        "default": false,
-        "docs": [],
-        "label": "get_merchant_volume",
-        "mutates": false,
-        "payable": false,
-        "returnType": {
-          "displayName": [
-            "ink",
-            "MessageResult"
-          ],
-          "type": 11
-        },
-        "selector": "0x3e3207be"
-      },
+        "label": "NodeRewardPaid"
+      }
+    ],
+    "lang_error": {
+      "displayName": [
+        "ink",
+        "LangError"
+      ],
+      "type": 6
+    },
+    "messages": [
       {
         "args": [
           {
-            "label": "session_index",
+            "label": "mining_pool",
             "type": {
               "displayName": [
-                "u32"
+                "AccountId"
               ],
-              "type": 4
+              "type": 0
             }
           }
         ],
         "default": false,
         "docs": [],
-        "label": "get_session_volume",
-        "mutates": false,
+        "label": "set_mining_pool",
+        "mutates": true,
         "payable": false,
         "returnType": {
           "displayName": [
             "ink",
             "MessageResult"
           ],
-          "type": 11
+          "type": 7
         },
-        "selector": "0x91894472"
+        "selector": "0xbad17c27"
       },
       {
         "args": [
           {
-            "label": "session_index",
+            "label": "rewards_pallet",
             "type": {
               "displayName": [
-                "u32"
+                "AccountId"
               ],
-              "type": 4
+              "type": 0
             }
           }
         ],
         "default": false,
         "docs": [],
-        "label": "save_session_volume_and_get_delta",
+        "label": "set_rewards_pallet",
         "mutates": true,
         "payable": false,
         "returnType": {
@@ -225,46 +196,72 @@
             "ink",
             "MessageResult"
           ],
-          "type": 12
+          "type": 7
         },
-        "selector": "0xd3f74453"
-      },
-      {
-        "args": [],
-        "default": false,
-        "docs": [],
-        "label": "get_total_volume",
-        "mutates": false,
-        "payable": false,
-        "returnType": {
-          "displayName": [
-            "ink",
-            "MessageResult"
-          ],
-          "type": 11
-        },
-        "selector": "0xe88330b2"
-      },
-      {
-        "args": [],
-        "default": false,
-        "docs": [],
-        "label": "process_merchant_payment",
-        "mutates": true,
-        "payable": true,
-        "returnType": {
-          "displayName": [
-            "ink",
-            "MessageResult"
-          ],
-          "type": 8
-        },
-        "selector": "0xcbdfeaf9"
+        "selector": "0xe54af172"
       },
       {
         "args": [
           {
-            "label": "user_account",
+            "label": "new_admin",
+            "type": {
+              "displayName": [
+                "AccountId"
+              ],
+              "type": 0
+            }
+          }
+        ],
+        "default": false,
+        "docs": [],
+        "label": "relinquish_admin",
+        "mutates": true,
+        "payable": false,
+        "returnType": {
+          "displayName": [
+            "ink",
+            "MessageResult"
+          ],
+          "type": 7
+        },
+        "selector": "0xda7dbaee"
+      },
+      {
+        "args": [],
+        "default": false,
+        "docs": [],
+        "label": "accept_admin",
+        "mutates": true,
+        "payable": false,
+        "returnType": {
+          "displayName": [
+            "ink",
+            "MessageResult"
+          ],
+          "type": 7
+        },
+        "selector": "0x3830821d"
+      },
+      {
+        "args": [],
+        "default": false,
+        "docs": [],
+        "label": "cancel_admin_relinquish",
+        "mutates": true,
+        "payable": false,
+        "returnType": {
+          "displayName": [
+            "ink",
+            "MessageResult"
+          ],
+          "type": 7
+        },
+        "selector": "0xf9cc42d0"
+      },
+      {
+        "args": [
+          {
+            "label": "node_id",
             "type": {
               "displayName": [
                 "AccountId"
@@ -273,18 +270,44 @@
             }
           },
           {
-            "label": "redeemable_usdt",
+            "label": "receiver",
             "type": {
               "displayName": [
-                "Balance"
+                "AccountId"
               ],
-              "type": 3
+              "type": 0
             }
           }
         ],
         "default": false,
         "docs": [],
-        "label": "merchant_user_redeem_d9",
+        "label": "withdraw_reward",
+        "mutates": true,
+        "payable": false,
+        "returnType": {
+          "displayName": [
+            "ink",
+            "MessageResult"
+          ],
+          "type": 7
+        },
+        "selector": "0x07fe6b9e"
+      },
+      {
+        "args": [
+          {
+            "label": "session_index",
+            "type": {
+              "displayName": [
+                "u32"
+              ],
+              "type": 10
+            }
+          }
+        ],
+        "default": false,
+        "docs": [],
+        "label": "get_session_rewards_data",
         "mutates": false,
         "payable": false,
         "returnType": {
@@ -292,14 +315,14 @@
             "ink",
             "MessageResult"
           ],
-          "type": 12
+          "type": 11
         },
-        "selector": "0x152062a1"
+        "selector": "0x5b4a8bb7"
       },
       {
         "args": [
           {
-            "label": "merchant_contract",
+            "label": "node_id",
             "type": {
               "displayName": [
                 "AccountId"
@@ -310,22 +333,22 @@
         ],
         "default": false,
         "docs": [],
-        "label": "change_merchant_contract",
-        "mutates": true,
+        "label": "get_node_reward_data",
+        "mutates": false,
         "payable": false,
         "returnType": {
           "displayName": [
             "ink",
             "MessageResult"
           ],
-          "type": 8
+          "type": 11
         },
-        "selector": "0x1221b207"
+        "selector": "0x72c500b8"
       },
       {
         "args": [
           {
-            "label": "node_reward_contract",
+            "label": "node_id",
             "type": {
               "displayName": [
                 "AccountId"
@@ -336,33 +359,42 @@
         ],
         "default": false,
         "docs": [],
-        "label": "change_node_reward_contract",
-        "mutates": true,
+        "label": "get_authorized_receiver",
+        "mutates": false,
         "payable": false,
         "returnType": {
           "displayName": [
             "ink",
             "MessageResult"
           ],
-          "type": 8
+          "type": 13
         },
-        "selector": "0x5cfb2c63"
+        "selector": "0x7a99af59"
       },
       {
         "args": [
           {
-            "label": "amm_contract",
+            "label": "last_session",
             "type": {
               "displayName": [
-                "AccountId"
+                "u32"
               ],
-              "type": 0
+              "type": 10
+            }
+          },
+          {
+            "label": "sorted_nodes",
+            "type": {
+              "displayName": [
+                "Vec"
+              ],
+              "type": 14
             }
           }
         ],
         "default": false,
         "docs": [],
-        "label": "change_amm_contract",
+        "label": "update_rewards",
         "mutates": true,
         "payable": false,
         "returnType": {
@@ -370,35 +402,9 @@
             "ink",
             "MessageResult"
           ],
-          "type": 8
+          "type": 7
         },
-        "selector": "0x0db11b82"
-      },
-      {
-        "args": [
-          {
-            "label": "main_contract",
-            "type": {
-              "displayName": [
-                "AccountId"
-              ],
-              "type": 0
-            }
-          }
-        ],
-        "default": false,
-        "docs": [],
-        "label": "change_main_contract",
-        "mutates": true,
-        "payable": false,
-        "returnType": {
-          "displayName": [
-            "ink",
-            "MessageResult"
-          ],
-          "type": 8
-        },
-        "selector": "0xbb530edc"
+        "selector": "0x93440f8d"
       },
       {
         "args": [
@@ -420,7 +426,7 @@
             "ink",
             "MessageResult"
           ],
-          "type": 5
+          "type": 4
         },
         "selector": "0x694fb50f"
       }
@@ -447,7 +453,7 @@
                   "ty": 0
                 }
               },
-              "name": "main_contract"
+              "name": "new_admin"
             },
             {
               "layout": {
@@ -456,7 +462,7 @@
                   "ty": 0
                 }
               },
-              "name": "merchant_contract"
+              "name": "mining_pool"
             },
             {
               "layout": {
@@ -465,51 +471,52 @@
                   "ty": 0
                 }
               },
-              "name": "node_reward_contract"
-            },
-            {
-              "layout": {
-                "leaf": {
-                  "key": "0x00000000",
-                  "ty": 0
-                }
-              },
-              "name": "amm_contract"
-            },
-            {
-              "layout": {
-                "leaf": {
-                  "key": "0x00000000",
-                  "ty": 3
-                }
-              },
-              "name": "merchant_volume"
+              "name": "rewards_pallet"
             },
             {
               "layout": {
                 "root": {
                   "layout": {
                     "leaf": {
-                      "key": "0xd9887759",
+                      "key": "0x57cf89ff",
                       "ty": 3
                     }
                   },
-                  "root_key": "0xd9887759"
+                  "root_key": "0x57cf89ff"
                 }
               },
-              "name": "volume_at_index"
+              "name": "session_rewards"
             },
             {
               "layout": {
-                "leaf": {
-                  "key": "0x00000000",
-                  "ty": 4
+                "root": {
+                  "layout": {
+                    "leaf": {
+                      "key": "0xce7978af",
+                      "ty": 3
+                    }
+                  },
+                  "root_key": "0xce7978af"
                 }
               },
-              "name": "last_session"
+              "name": "node_reward"
+            },
+            {
+              "layout": {
+                "root": {
+                  "layout": {
+                    "leaf": {
+                      "key": "0x2802a071",
+                      "ty": 0
+                    }
+                  },
+                  "root_key": "0x2802a071"
+                }
+              },
+              "name": "authorized_reward_receiver"
             }
           ],
-          "name": "MiningPool"
+          "name": "NodeReward"
         }
       },
       "root_key": "0x00000000"
@@ -567,20 +574,12 @@
       "id": 4,
       "type": {
         "def": {
-          "primitive": "u32"
-        }
-      }
-    },
-    {
-      "id": 5,
-      "type": {
-        "def": {
           "variant": {
             "variants": [
               {
                 "fields": [
                   {
-                    "type": 6
+                    "type": 5
                   }
                 ],
                 "index": 0,
@@ -589,7 +588,7 @@
               {
                 "fields": [
                   {
-                    "type": 7
+                    "type": 6
                   }
                 ],
                 "index": 1,
@@ -601,11 +600,11 @@
         "params": [
           {
             "name": "T",
-            "type": 6
+            "type": 5
           },
           {
             "name": "E",
-            "type": 7
+            "type": 6
           }
         ],
         "path": [
@@ -614,7 +613,7 @@
       }
     },
     {
-      "id": 6,
+      "id": 5,
       "type": {
         "def": {
           "tuple": []
@@ -622,7 +621,7 @@
       }
     },
     {
-      "id": 7,
+      "id": 6,
       "type": {
         "def": {
           "variant": {
@@ -641,7 +640,7 @@
       }
     },
     {
-      "id": 8,
+      "id": 7,
       "type": {
         "def": {
           "variant": {
@@ -649,7 +648,7 @@
               {
                 "fields": [
                   {
-                    "type": 9
+                    "type": 8
                   }
                 ],
                 "index": 0,
@@ -658,7 +657,7 @@
               {
                 "fields": [
                   {
-                    "type": 7
+                    "type": 6
                   }
                 ],
                 "index": 1,
@@ -670,11 +669,53 @@
         "params": [
           {
             "name": "T",
-            "type": 9
+            "type": 8
           },
           {
             "name": "E",
-            "type": 7
+            "type": 6
+          }
+        ],
+        "path": [
+          "Result"
+        ]
+      }
+    },
+    {
+      "id": 8,
+      "type": {
+        "def": {
+          "variant": {
+            "variants": [
+              {
+                "fields": [
+                  {
+                    "type": 5
+                  }
+                ],
+                "index": 0,
+                "name": "Ok"
+              },
+              {
+                "fields": [
+                  {
+                    "type": 9
+                  }
+                ],
+                "index": 1,
+                "name": "Err"
+              }
+            ]
+          }
+        },
+        "params": [
+          {
+            "name": "T",
+            "type": 5
+          },
+          {
+            "name": "E",
+            "type": 9
           }
         ],
         "path": [
@@ -691,48 +732,6 @@
               {
                 "fields": [
                   {
-                    "type": 6
-                  }
-                ],
-                "index": 0,
-                "name": "Ok"
-              },
-              {
-                "fields": [
-                  {
-                    "type": 10
-                  }
-                ],
-                "index": 1,
-                "name": "Err"
-              }
-            ]
-          }
-        },
-        "params": [
-          {
-            "name": "T",
-            "type": 6
-          },
-          {
-            "name": "E",
-            "type": 10
-          }
-        ],
-        "path": [
-          "Result"
-        ]
-      }
-    },
-    {
-      "id": 10,
-      "type": {
-        "def": {
-          "variant": {
-            "variants": [
-              {
-                "fields": [
-                  {
                     "type": 0,
                     "typeName": "AccountId"
                   }
@@ -742,24 +741,40 @@
               },
               {
                 "index": 1,
-                "name": "FailedToGetExchangeAmount"
+                "name": "BeyondQualificationForNodeStatus"
               },
               {
                 "index": 2,
-                "name": "FailedToTransferD9ToUser"
+                "name": "ErrorIssuingPayment"
               },
               {
                 "index": 3,
-                "name": "SessionPoolNotReady"
+                "name": "ErrorGettingSessionPoolFromMiningPoolContract"
+              },
+              {
+                "index": 4,
+                "name": "NotAuthorizedToWithdraw"
+              },
+              {
+                "index": 5,
+                "name": "NothingToWithdraw"
               }
             ]
           }
         },
         "path": [
-          "mining_pool",
-          "mining_pool",
+          "node_reward",
+          "node_reward",
           "Error"
         ]
+      }
+    },
+    {
+      "id": 10,
+      "type": {
+        "def": {
+          "primitive": "u32"
+        }
       }
     },
     {
@@ -771,7 +786,7 @@
               {
                 "fields": [
                   {
-                    "type": 3
+                    "type": 12
                   }
                 ],
                 "index": 0,
@@ -780,7 +795,7 @@
               {
                 "fields": [
                   {
-                    "type": 7
+                    "type": 6
                   }
                 ],
                 "index": 1,
@@ -792,11 +807,11 @@
         "params": [
           {
             "name": "T",
-            "type": 3
+            "type": 12
           },
           {
             "name": "E",
-            "type": 7
+            "type": 6
           }
         ],
         "path": [
@@ -811,22 +826,17 @@
           "variant": {
             "variants": [
               {
-                "fields": [
-                  {
-                    "type": 13
-                  }
-                ],
                 "index": 0,
-                "name": "Ok"
+                "name": "None"
               },
               {
                 "fields": [
                   {
-                    "type": 7
+                    "type": 3
                   }
                 ],
                 "index": 1,
-                "name": "Err"
+                "name": "Some"
               }
             ]
           }
@@ -834,15 +844,11 @@
         "params": [
           {
             "name": "T",
-            "type": 13
-          },
-          {
-            "name": "E",
-            "type": 7
+            "type": 3
           }
         ],
         "path": [
-          "Result"
+          "Option"
         ]
       }
     },
@@ -855,7 +861,7 @@
               {
                 "fields": [
                   {
-                    "type": 3
+                    "type": 0
                   }
                 ],
                 "index": 0,
@@ -864,7 +870,7 @@
               {
                 "fields": [
                   {
-                    "type": 10
+                    "type": 6
                   }
                 ],
                 "index": 1,
@@ -876,11 +882,11 @@
         "params": [
           {
             "name": "T",
-            "type": 3
+            "type": 0
           },
           {
             "name": "E",
-            "type": 10
+            "type": 6
           }
         ],
         "path": [
@@ -890,6 +896,16 @@
     },
     {
       "id": 14,
+      "type": {
+        "def": {
+          "sequence": {
+            "type": 0
+          }
+        }
+      }
+    },
+    {
+      "id": 15,
       "type": {
         "def": {
           "composite": {
@@ -909,7 +925,7 @@
       }
     },
     {
-      "id": 15,
+      "id": 16,
       "type": {
         "def": {
           "primitive": "u64"
@@ -917,7 +933,7 @@
       }
     },
     {
-      "id": 16,
+      "id": 17,
       "type": {
         "def": {
           "variant": {}

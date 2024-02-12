@@ -1,7 +1,7 @@
 #![cfg_attr(not(feature = "std"), no_std, no_main)]
+use ink::{env::Environment, prelude::vec::Vec, primitives::AccountId};
+use scale::{Decode, Encode};
 use sp_arithmetic::Perquintill;
-use ink::{ env::Environment, prelude::vec::Vec, primitives::AccountId };
-use scale::{ Decode, Encode };
 // use sp_staking::SessionIndex;
 // use scale_info::TypeInfo;
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -25,12 +25,12 @@ pub trait D9ChainExtension {
 
     #[ink(extension = 0)]
     fn get_referree_parent(
-        referree: <D9Environment as Environment>::AccountId
+        referree: <D9Environment as Environment>::AccountId,
     ) -> Option<<D9Environment as Environment>::AccountId>;
 
     #[ink(extension = 1)]
     fn get_ancestors(
-        referree: <D9Environment as Environment>::AccountId
+        referree: <D9Environment as Environment>::AccountId,
     ) -> Result<Option<Vec<<D9Environment as Environment>::AccountId>>, RuntimeError>;
 
     #[ink(extension = 2)]
@@ -38,7 +38,7 @@ pub trait D9ChainExtension {
 
     #[ink(extension = 3)]
     fn get_session_node_list(
-        session_index: u32
+        session_index: u32,
     ) -> Result<Vec<<D9Environment as Environment>::AccountId>, RuntimeError>;
 
     #[ink(extension = 4)]
@@ -53,7 +53,7 @@ pub trait D9ChainExtension {
     #[ink(extension = 7)]
     fn get_user_vote_ratio_for_candidate(
         user_id: AccountId,
-        node_id: AccountId
+        node_id: AccountId,
     ) -> Result<Option<Perquintill>, RuntimeError>;
 }
 

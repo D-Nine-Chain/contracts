@@ -5,10 +5,10 @@ pub use d9_chain_extension::D9Environment;
 #[ink::contract(env = D9Environment)]
 mod mining_pool {
     use super::*;
-    use ink::storage::Mapping;
-    use scale::{ Decode, Encode };
     use ink::env::call::{ build_call, ExecutionInput, Selector };
     use ink::selector_bytes;
+    use ink::storage::Mapping;
+    use scale::{ Decode, Encode };
     // use substrate_fixed::{ FixedU128, types::extra::U12 };
     // type FixedBalance = FixedU128<U12>;
 
@@ -33,14 +33,21 @@ mod mining_pool {
 
     #[ink(storage)]
     pub struct MiningPool {
+        /// contract admin
         admin: AccountId,
-        reward_pallet: AccountId,
+        /// main contract that holds burn data and burn funds
         main_contract: AccountId,
+        /// merchant contract, its funds are sent here
         merchant_contract: AccountId,
+        /// contract that defines node rewards
         node_reward_contract: AccountId,
+        /// decentralized exchange
         amm_contract: AccountId,
-        total_merchant_processed_d9: Balance,
-        session_total_processed_d9: Mapping<u32, Balance>,
+        /// total number of tokens processed by the merchant contract
+        merchant_volume: Balance,
+        /// the total number of tokens processed by merchant/burn contract at each recorded session
+        volume_at_index: Mapping<u32, Balance>,
+        /// last session index process by this contract by `node_reward_contract`
         last_session: u32,
     }
 
@@ -59,9 +66,8 @@ mod mining_pool {
                 node_reward_contract,
                 merchant_contract,
                 amm_contract,
-                total_merchant_processed_d9: 0,
-                session_total_processed_d9: Mapping::new(),
-                reward_pallet: [0u8; 32].into(),
+                merchant_volume: 0,
+                volume_at_index: Mapping::new(),
                 last_session: 0,
             }
         }
@@ -78,45 +84,54 @@ mod mining_pool {
         }
 
         #[ink(message)]
-        pub fn update_session_total(&mut self, ending_session: u32) -> Result<(), Error> {
-            let _ = self.only_callable_by(self.reward_pallet)?;
-            let total_burned = self.get_total_burned();
-            let new_session_total = total_burned.saturating_add(self.total_merchant_processed_d9);
-            self.session_total_processed_d9.insert(ending_session, &new_session_total);
-            self.last_session = ending_session;
-            Ok(())
+        pub fn get_merchant_volume(&self) -> Balance {
+            self.merchant_volume
         }
 
-        pub fn get_last_session_pool(&self) -> Result<Balance, Error> {
-            self.calculate_session_pool(self.last_session)
-        }
-
-        /// session pool is defined as the difference between session_index total and previous session total
-        ///
-        /// we want a delta value
         #[ink(message)]
-        pub fn calculate_session_pool(&self, session_index: u32) -> Result<Balance, Error> {
-            let session_total_opt = self.session_total_processed_d9.get(&session_index);
-            let session_total = match session_total_opt {
-                Some(total) => total,
-                None => {
-                    return Err(Error::SessionPoolNotReady);
-                }
-            };
-            let previous_session = session_index - 1;
-            let previous_session_total = self.session_total_processed_d9
-                .get(&previous_session)
-                .unwrap_or(0);
-            let session_pool = session_total.saturating_sub(previous_session_total);
-            Ok(session_pool)
+        pub fn get_session_volume(&self, session_index: u32) -> Balance {
+            self.volume_at_index.get(&session_index).unwrap_or(0)
+        }
+
+        #[ink(message)]
+        pub fn save_session_volume_and_get_delta(
+            &mut self,
+            session_index: u32
+        ) -> Result<Balance, Error> {
+            self.only_callable_by(self.node_reward_contract)?;
+
+            self.last_session = session_index;
+            let total_volume = self.get_total_volume();
+            self.volume_at_index.insert(session_index, &total_volume);
+
+            let session_delta = self.calculate_session_delta(session_index, total_volume)?;
+
+            Ok(session_delta)
+        }
+
+        fn calculate_session_delta(
+            &self,
+            session_index: u32,
+            current_volume: Balance
+        ) -> Result<Balance, Error> {
+            let previous_index = session_index.saturating_sub(1);
+            let previous_volume = self.volume_at_index.get(&previous_index).unwrap_or(0);
+            let session_delta = current_volume.saturating_sub(previous_volume);
+            Ok(session_delta)
+        }
+
+        #[ink(message)]
+        pub fn get_total_volume(&self) -> Balance {
+            let total_burned = self.get_total_burned();
+            let total_merchant_mined = self.merchant_volume;
+            total_burned.saturating_add(total_merchant_mined)
         }
 
         #[ink(message, payable)]
         pub fn process_merchant_payment(&mut self) -> Result<(), Error> {
             let _ = self.only_callable_by(self.merchant_contract)?;
             let received_amount = self.env().transferred_value();
-            self.total_merchant_processed_d9 =
-                self.total_merchant_processed_d9.saturating_add(received_amount);
+            self.merchant_volume = self.merchant_volume.saturating_add(received_amount);
             Ok(())
         }
 
@@ -180,13 +195,6 @@ mod mining_pool {
         }
 
         #[ink(message)]
-        pub fn change_reward_pallet(&mut self, reward_pallet: AccountId) -> Result<(), Error> {
-            let _ = self.only_callable_by(self.admin)?;
-            self.reward_pallet = reward_pallet;
-            Ok(())
-        }
-
-        #[ink(message)]
         pub fn change_node_reward_contract(
             &mut self,
             node_reward_contract: AccountId
@@ -195,6 +203,7 @@ mod mining_pool {
             self.node_reward_contract = node_reward_contract;
             Ok(())
         }
+
         #[ink(message)]
         pub fn change_amm_contract(&mut self, amm_contract: AccountId) -> Result<(), Error> {
             let _ = self.only_callable_by(self.admin);

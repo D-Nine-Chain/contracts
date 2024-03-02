@@ -19,9 +19,12 @@ mod node_reward {
         new_admin: AccountId,
         mining_pool: AccountId,
         rewards_pallet: AccountId,
-        session_rewards: Mapping<u32, Balance>,
+        ///reward pool for the session and amount paid in total
+        session_rewards: Mapping<u32, (Balance, Balance)>,
         node_reward: Mapping<AccountId, Balance>,
         authorized_reward_receiver: Mapping<AccountId, AccountId>,
+        /// minimum number of votes a node must have to receive a reward
+        vote_limit: u64,
     }
 
     #[derive(Encode, Decode, Debug, PartialEq, Eq, Copy, Clone)]
@@ -49,6 +52,7 @@ mod node_reward {
         ErrorGettingSessionPoolFromMiningPoolContract,
         NotAuthorizedToWithdraw,
         NothingToWithdraw,
+        ErrorGettingCurrentValidators,
     }
     #[ink(event)]
     pub struct NodeRewardPaid {
@@ -72,6 +76,7 @@ mod node_reward {
                 session_rewards: Mapping::new(),
                 node_reward: Mapping::new(),
                 authorized_reward_receiver: Mapping::new(),
+                vote_limit: 680_000,
             }
         }
 
@@ -117,6 +122,17 @@ mod node_reward {
             self.new_admin = [0u8; 32].into();
             Ok(())
         }
+        #[ink(message)]
+        pub fn get_vote_limit(&self) -> u64 {
+            self.vote_limit
+        }
+
+        #[ink(message)]
+        pub fn change_vote_limit(&mut self, new_limit: u64) -> Result<(), Error> {
+            self.only_callable_by(self.admin)?;
+            self.vote_limit = new_limit;
+            Ok(())
+        }
 
         #[ink(message)]
         pub fn withdraw_reward(
@@ -144,7 +160,7 @@ mod node_reward {
         }
 
         #[ink(message)]
-        pub fn get_session_rewards_data(&self, session_index: u32) -> Option<Balance> {
+        pub fn get_session_rewards_data(&self, session_index: u32) -> Option<(Balance, Balance)> {
             self.session_rewards.get(&session_index)
         }
 
@@ -165,28 +181,36 @@ mod node_reward {
         pub fn update_rewards(
             &mut self,
             last_session: u32,
-            sorted_nodes: Vec<AccountId>
+            sorted_nodes_and_votes: Vec<(AccountId, u64)>
         ) -> Result<(), Error> {
             self.only_callable_by(self.rewards_pallet)?;
-            let mut nodes: Vec<AccountId> = sorted_nodes.clone();
+            let mut nodes_and_votes_vec: Vec<(AccountId, u64)> = sorted_nodes_and_votes.clone();
+            let current_active_validators = self.get_active_validators()?;
+            let mut total_paid_out: Balance = 0;
             let reward_pool = self.get_reward_pool(last_session)?;
-            if reward_pool < 1_000_000_000_000 {
-                return Ok(());
+            // from pallet it is truncated to limit of MaxCandidates
+            // here we truncate to max payable of 288
+            if nodes_and_votes_vec.len() > 288 {
+                nodes_and_votes_vec.truncate(288);
             }
-            if nodes.len() > 288 {
-                nodes.truncate(288);
-            }
-            for (index, node) in nodes.iter().enumerate() {
+            for (index, node_and_votes) in nodes_and_votes_vec.iter().enumerate() {
                 let get_node_tier_result = self.node_tier_by_vec_position(index);
                 if get_node_tier_result.is_err() {
                     continue;
                 }
                 let node_tier = get_node_tier_result.unwrap();
                 let node_share = self.calc_single_node_share(reward_pool, node_tier);
-                let _ = self.credit_node_reward(*node, node_share)?;
+                if
+                    node_and_votes.1 >= self.vote_limit &&
+                    current_active_validators.contains(&node_and_votes.0)
+                {
+                    let node_id: AccountId = node_and_votes.0;
+                    let _ = self.credit_node_reward(node_id, node_share)?;
+                    total_paid_out = total_paid_out.saturating_add(node_share);
+                    let _ = self.deduct_from_reward_pool(node_share);
+                }
             }
-
-            self.session_rewards.insert(last_session, &reward_pool);
+            self.session_rewards.insert(last_session, &(reward_pool, total_paid_out));
             Ok(())
         }
 
@@ -207,6 +231,14 @@ mod node_reward {
             Ok(())
         }
 
+        fn get_active_validators(&self) -> Result<Vec<AccountId>, Error> {
+            let retrieve_validators_result = self.env().extension().get_active_validators();
+            match retrieve_validators_result {
+                Ok(validators) => Ok(validators),
+                Err(_) => Err(Error::ErrorGettingCurrentValidators),
+            }
+        }
+
         fn credit_node_reward(
             &mut self,
             node_id: AccountId,
@@ -216,6 +248,19 @@ mod node_reward {
             let new_balance: Balance = node_reward_balance.saturating_add(balance_increase);
             self.node_reward.insert(node_id, &new_balance);
             Ok(())
+        }
+
+        fn deduct_from_reward_pool(&self, amount: Balance) -> Result<(), Error> {
+            build_call::<D9Environment>()
+                .call(self.mining_pool)
+                .gas_limit(0)
+                .exec_input(
+                    ExecutionInput::new(
+                        Selector::new(selector_bytes!("deduct_from_reward_pool"))
+                    ).push_arg(amount)
+                )
+                .returns::<Result<(), Error>>()
+                .invoke()
         }
 
         fn deduct_node_reward(&mut self, node_id: AccountId) -> Result<(), Error> {
@@ -240,13 +285,13 @@ mod node_reward {
                 .invoke()
         }
 
-        fn get_session_pool(&self, session_index: u32) -> Result<Balance, Error> {
+        fn get_reward_pool(&self, session_index: u32) -> Result<Balance, Error> {
             let result = build_call::<D9Environment>()
                 .call(self.mining_pool)
                 .gas_limit(0)
                 .exec_input(
                     ExecutionInput::new(
-                        Selector::new(selector_bytes!("save_session_volume_and_get_delta"))
+                        Selector::new(selector_bytes!("update_pool_and_retrieve"))
                     ).push_arg(session_index)
                 )
                 .returns::<Result<Balance, Error>>()
@@ -272,14 +317,6 @@ mod node_reward {
             } else {
                 Err(Error::BeyondQualificationForNodeStatus)
             }
-        }
-
-        fn get_reward_pool(&self, session_index: u32) -> Result<Balance, Error> {
-            let session_pool = self.get_session_pool(session_index)?;
-            let ten_percent = Perquintill::from_percent(10);
-            let reward_pool = ten_percent.mul_floor(session_pool);
-
-            Ok(reward_pool)
         }
 
         fn calc_single_node_share(&self, reward_pool: Balance, node_tier: NodeTier) -> Balance {

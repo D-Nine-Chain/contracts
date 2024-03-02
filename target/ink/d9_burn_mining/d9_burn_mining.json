@@ -1,6 +1,6 @@
 {
   "source": {
-    "hash": "0x723f254c794e82e3fbacc974f902d6bcb13cbb63522581013f8dd58183d1b2da",
+    "hash": "0xa1245e9aaa904fd32b47665ecb84bff4d2357eea3d82257d092e3e05b66b3904",
     "language": "ink! 4.3.0",
     "compiler": "rustc 1.72.0",
     "build_info": {
@@ -787,106 +787,110 @@
               },
               {
                 "index": 11,
-                "name": "CrossContractCallFailed"
+                "name": "BurnAmountNotMultipleOf100"
               },
               {
                 "index": 12,
-                "name": "WithdrawalNotAllowed"
+                "name": "CrossContractCallFailed"
               },
               {
                 "index": 13,
-                "name": "WithdrawalAmountZero"
+                "name": "WithdrawalNotAllowed"
               },
               {
                 "index": 14,
-                "name": "RuntimeErrorGettingAncestors"
+                "name": "WithdrawalAmountZero"
               },
               {
                 "index": 15,
-                "name": "NoAncestorsFound"
+                "name": "RuntimeErrorGettingAncestors"
               },
               {
                 "index": 16,
-                "name": "MustBeMultipleOf100"
+                "name": "NoAncestorsFound"
               },
               {
                 "index": 17,
-                "name": "RemoteCallToBurnContractFailed"
+                "name": "MustBeMultipleOf100"
               },
               {
                 "index": 18,
-                "name": "RemoteCallToMiningPoolFailed"
+                "name": "RemoteCallToBurnContractFailed"
               },
               {
                 "index": 19,
-                "name": "SomeEnvironmentError"
+                "name": "RemoteCallToMiningPoolFailed"
               },
               {
                 "index": 20,
-                "name": "CalledContractTrapped"
+                "name": "SomeEnvironmentError"
               },
               {
                 "index": 21,
-                "name": "CalledContractReverted"
+                "name": "CalledContractTrapped"
               },
               {
                 "index": 22,
-                "name": "NotCallable"
+                "name": "CalledContractReverted"
               },
               {
                 "index": 23,
-                "name": "SomeDecodeError"
+                "name": "NotCallable"
               },
               {
                 "index": 24,
-                "name": "SomeOffChainError"
+                "name": "SomeDecodeError"
               },
               {
                 "index": 25,
-                "name": "CalleeTrapped"
+                "name": "SomeOffChainError"
               },
               {
                 "index": 26,
-                "name": "CalleeReverted"
+                "name": "CalleeTrapped"
               },
               {
                 "index": 27,
-                "name": "KeyNotFound"
+                "name": "CalleeReverted"
               },
               {
                 "index": 28,
-                "name": "_BelowSubsistenceThreshold"
+                "name": "KeyNotFound"
               },
               {
                 "index": 29,
-                "name": "EnvironmentalTransferFailed"
+                "name": "_BelowSubsistenceThreshold"
               },
               {
                 "index": 30,
-                "name": "_EndowmentTooLow"
+                "name": "EnvironmentalTransferFailed"
               },
               {
                 "index": 31,
-                "name": "CodeNotFound"
+                "name": "_EndowmentTooLow"
               },
               {
                 "index": 32,
-                "name": "Unknown"
+                "name": "CodeNotFound"
               },
               {
                 "index": 33,
-                "name": "LoggingDisabled"
+                "name": "Unknown"
               },
               {
                 "index": 34,
-                "name": "CallRuntimeFailed"
+                "name": "LoggingDisabled"
               },
               {
                 "index": 35,
-                "name": "EcdsaRecoveryFailed"
+                "name": "CallRuntimeFailed"
               },
               {
                 "index": 36,
+                "name": "EcdsaRecoveryFailed"
+              },
+              {
+                "index": 37,
                 "name": "WithdrawalAmountExceedsBalance"
               }
             ]

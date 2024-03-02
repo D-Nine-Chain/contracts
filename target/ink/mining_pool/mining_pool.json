@@ -1,6 +1,6 @@
 {
   "source": {
-    "hash": "0xbc5f09218dffea5d6df6ad24bf54fb56d0823665051a689064f3e91337c1b55e",
+    "hash": "0x909701e2cb99563a54bf3276ec74e0083e74c21a5758560ab9270a3130b25fea",
     "language": "ink! 4.3.0",
     "compiler": "rustc 1.72.0",
     "build_info": {
@@ -127,6 +127,22 @@
     },
     "messages": [
       {
+        "args": [],
+        "default": false,
+        "docs": [],
+        "label": "get_accumulative_reward_pool",
+        "mutates": false,
+        "payable": false,
+        "returnType": {
+          "displayName": [
+            "ink",
+            "MessageResult"
+          ],
+          "type": 8
+        },
+        "selector": "0x71ebcde6"
+      },
+      {
         "args": [
           {
             "label": "account_id",
@@ -157,7 +173,7 @@
             "ink",
             "MessageResult"
           ],
-          "type": 8
+          "type": 9
         },
         "selector": "0x2f0dd006"
       },
@@ -173,7 +189,7 @@
             "ink",
             "MessageResult"
           ],
-          "type": 11
+          "type": 8
         },
         "selector": "0x3e3207be"
       },
@@ -199,7 +215,7 @@
             "ink",
             "MessageResult"
           ],
-          "type": 11
+          "type": 8
         },
         "selector": "0x91894472"
       },
@@ -217,7 +233,7 @@
         ],
         "default": false,
         "docs": [],
-        "label": "save_session_volume_and_get_delta",
+        "label": "update_pool_and_retrieve",
         "mutates": true,
         "payable": false,
         "returnType": {
@@ -227,7 +243,33 @@
           ],
           "type": 12
         },
-        "selector": "0xd3f74453"
+        "selector": "0x8a1783cd"
+      },
+      {
+        "args": [
+          {
+            "label": "amount",
+            "type": {
+              "displayName": [
+                "Balance"
+              ],
+              "type": 3
+            }
+          }
+        ],
+        "default": false,
+        "docs": [],
+        "label": "deduct_from_reward_pool",
+        "mutates": true,
+        "payable": false,
+        "returnType": {
+          "displayName": [
+            "ink",
+            "MessageResult"
+          ],
+          "type": 9
+        },
+        "selector": "0x7df305eb"
       },
       {
         "args": [],
@@ -241,7 +283,7 @@
             "ink",
             "MessageResult"
           ],
-          "type": 11
+          "type": 8
         },
         "selector": "0xe88330b2"
       },
@@ -257,7 +299,7 @@
             "ink",
             "MessageResult"
           ],
-          "type": 8
+          "type": 9
         },
         "selector": "0xcbdfeaf9"
       },
@@ -318,9 +360,44 @@
             "ink",
             "MessageResult"
           ],
-          "type": 8
+          "type": 9
         },
         "selector": "0x1221b207"
+      },
+      {
+        "args": [
+          {
+            "label": "to",
+            "type": {
+              "displayName": [
+                "AccountId"
+              ],
+              "type": 0
+            }
+          },
+          {
+            "label": "amount",
+            "type": {
+              "displayName": [
+                "Balance"
+              ],
+              "type": 3
+            }
+          }
+        ],
+        "default": false,
+        "docs": [],
+        "label": "send_to",
+        "mutates": true,
+        "payable": false,
+        "returnType": {
+          "displayName": [
+            "ink",
+            "MessageResult"
+          ],
+          "type": 9
+        },
+        "selector": "0x651d5be0"
       },
       {
         "args": [
@@ -344,7 +421,7 @@
             "ink",
             "MessageResult"
           ],
-          "type": 8
+          "type": 9
         },
         "selector": "0x5cfb2c63"
       },
@@ -370,7 +447,7 @@
             "ink",
             "MessageResult"
           ],
-          "type": 8
+          "type": 9
         },
         "selector": "0x0db11b82"
       },
@@ -396,7 +473,7 @@
             "ink",
             "MessageResult"
           ],
-          "type": 8
+          "type": 9
         },
         "selector": "0xbb530edc"
       },
@@ -507,6 +584,15 @@
                 }
               },
               "name": "last_session"
+            },
+            {
+              "layout": {
+                "leaf": {
+                  "key": "0x00000000",
+                  "ty": 3
+                }
+              },
+              "name": "accumulative_reward_pool"
             }
           ],
           "name": "MiningPool"
@@ -649,7 +735,7 @@
               {
                 "fields": [
                   {
-                    "type": 9
+                    "type": 3
                   }
                 ],
                 "index": 0,
@@ -670,7 +756,7 @@
         "params": [
           {
             "name": "T",
-            "type": 9
+            "type": 3
           },
           {
             "name": "E",
@@ -691,6 +777,48 @@
               {
                 "fields": [
                   {
+                    "type": 10
+                  }
+                ],
+                "index": 0,
+                "name": "Ok"
+              },
+              {
+                "fields": [
+                  {
+                    "type": 7
+                  }
+                ],
+                "index": 1,
+                "name": "Err"
+              }
+            ]
+          }
+        },
+        "params": [
+          {
+            "name": "T",
+            "type": 10
+          },
+          {
+            "name": "E",
+            "type": 7
+          }
+        ],
+        "path": [
+          "Result"
+        ]
+      }
+    },
+    {
+      "id": 10,
+      "type": {
+        "def": {
+          "variant": {
+            "variants": [
+              {
+                "fields": [
+                  {
                     "type": 6
                   }
                 ],
@@ -700,7 +828,7 @@
               {
                 "fields": [
                   {
-                    "type": 10
+                    "type": 11
                   }
                 ],
                 "index": 1,
@@ -716,7 +844,7 @@
           },
           {
             "name": "E",
-            "type": 10
+            "type": 11
           }
         ],
         "path": [
@@ -725,7 +853,7 @@
       }
     },
     {
-      "id": 10,
+      "id": 11,
       "type": {
         "def": {
           "variant": {
@@ -759,48 +887,6 @@
           "mining_pool",
           "mining_pool",
           "Error"
-        ]
-      }
-    },
-    {
-      "id": 11,
-      "type": {
-        "def": {
-          "variant": {
-            "variants": [
-              {
-                "fields": [
-                  {
-                    "type": 3
-                  }
-                ],
-                "index": 0,
-                "name": "Ok"
-              },
-              {
-                "fields": [
-                  {
-                    "type": 7
-                  }
-                ],
-                "index": 1,
-                "name": "Err"
-              }
-            ]
-          }
-        },
-        "params": [
-          {
-            "name": "T",
-            "type": 3
-          },
-          {
-            "name": "E",
-            "type": 7
-          }
-        ],
-        "path": [
-          "Result"
         ]
       }
     },
@@ -864,7 +950,7 @@
               {
                 "fields": [
                   {
-                    "type": 10
+                    "type": 11
                   }
                 ],
                 "index": 1,
@@ -880,7 +966,7 @@
           },
           {
             "name": "E",
-            "type": 10
+            "type": 11
           }
         ],
         "path": [

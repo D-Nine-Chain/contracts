@@ -8,6 +8,7 @@ pub mod d9_burn_mining {
     use super::*;
     use ink::storage::Mapping;
     use sp_arithmetic::Perbill;
+    use sp_arithmetic::Perquintill;
     use ink::prelude::vec::Vec;
     #[ink(storage)]
     pub struct D9burnMining {
@@ -220,10 +221,10 @@ pub mod d9_burn_mining {
                 .saturating_sub(last_interaction)
                 .saturating_div(self.day_milliseconds);
 
-            let daily_return_percent = self._get_return_percent();
+            let daily_return_percent: Perquintill = self._get_return_percent();
 
             // let daily_allowance = daily_return_percent * account.balance_due;
-            let daily_allowance = daily_return_percent * account.amount_burned;
+            let daily_allowance = daily_return_percent.mul_floor(account.amount_burned);
             // Multiply the daily allowance by the number of days since the last withdrawal
             let allowance = daily_allowance.saturating_mul(days_since_last_action as u128); // cast needed here for arithmetic
 
@@ -271,10 +272,10 @@ pub mod d9_burn_mining {
             }
         }
 
-        fn _get_return_percent(&self) -> Perbill {
+        fn _get_return_percent(&self) -> Perquintill {
             let first_threshold_amount: Balance = 200_000_000_000_000_000_000;
             // let mut percentage: f64 = 0.008;
-            let percentage: Perbill = Perbill::from_rational(8u32, 1000u32);
+            let percentage: Perquintill = Perquintill::from_rational(8u64, 1000u64);
             if self.total_amount_burned <= first_threshold_amount {
                 return percentage;
             }
@@ -284,21 +285,25 @@ pub mod d9_burn_mining {
             let reductions: u128 = excess_amount
                 .saturating_div(100_000_000_000_000_000_000)
                 .saturating_add(1);
-            let divided_percent_by = reductions * 2;
+            let divided_percent_by = Balance::from(2u32).pow(reductions as u32);
             // for _ in 0..reductions {
             //     percentage.saturating_reciprocal_mul(Perbill::from_rational(2u32, 1u32));
             // }
-            self.divide_perbill_by_number(percentage, divided_percent_by as u32)
+            self.divide_perquintill_by_number(percentage, divided_percent_by as u64)
         }
 
-        fn divide_perbill_by_number(&self, perbill_value: Perbill, divisor: u32) -> Perbill {
+        fn divide_perquintill_by_number(
+            &self,
+            perquintill_value: Perquintill,
+            divisor: u64
+        ) -> Perquintill {
             if divisor == 0 {
                 panic!("Division by zero is not allowed");
             }
-            let divided_value = perbill_value.deconstruct().saturating_div(divisor);
+            let divided_value = perquintill_value.deconstruct().saturating_div(divisor);
 
             // Create a new Perbill instance from the divided value
-            Perbill::from_parts(divided_value)
+            Perquintill::from_parts(divided_value)
         }
     }
 

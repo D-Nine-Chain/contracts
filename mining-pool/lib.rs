@@ -9,6 +9,7 @@ mod mining_pool {
     use ink::selector_bytes;
     use ink::storage::Mapping;
     use scale::{ Decode, Encode };
+    use sp_arithmetic::Perquintill;
     // use substrate_fixed::{ FixedU128, types::extra::U12 };
     // type FixedBalance = FixedU128<U12>;
 
@@ -49,6 +50,8 @@ mod mining_pool {
         volume_at_index: Mapping<u32, Balance>,
         /// last session index process by this contract by `node_reward_contract`
         last_session: u32,
+        /// total accumulative reward session pool
+        accumulative_reward_pool: Balance,
     }
 
     impl MiningPool {
@@ -69,7 +72,13 @@ mod mining_pool {
                 merchant_volume: 0,
                 volume_at_index: Mapping::new(),
                 last_session: 0,
+                accumulative_reward_pool: 0,
             }
+        }
+
+        #[ink(message)]
+        pub fn get_accumulative_reward_pool(&self) -> Balance {
+            self.accumulative_reward_pool
         }
 
         #[ink(message)]
@@ -80,6 +89,7 @@ mod mining_pool {
         ) -> Result<(), Error> {
             let _ = self.only_callable_by(self.node_reward_contract)?;
             let _ = self.env().transfer(account_id, amount);
+            self.accumulative_reward_pool = self.accumulative_reward_pool.saturating_sub(amount);
             Ok(())
         }
 
@@ -94,10 +104,7 @@ mod mining_pool {
         }
 
         #[ink(message)]
-        pub fn save_session_volume_and_get_delta(
-            &mut self,
-            session_index: u32
-        ) -> Result<Balance, Error> {
+        pub fn update_pool_and_retrieve(&mut self, session_index: u32) -> Result<Balance, Error> {
             self.only_callable_by(self.node_reward_contract)?;
 
             self.last_session = session_index;
@@ -105,8 +112,20 @@ mod mining_pool {
             self.volume_at_index.insert(session_index, &total_volume);
 
             let session_delta = self.calculate_session_delta(session_index, total_volume)?;
+            let three_percent: Perquintill = Perquintill::from_percent(3);
+            let three_percent_of_delta = three_percent.mul_floor(session_delta);
+            self.accumulative_reward_pool =
+                self.accumulative_reward_pool.saturating_add(three_percent_of_delta);
+            let ten_percent = Perquintill::from_percent(10);
+            let reward_pool = ten_percent.mul_floor(self.accumulative_reward_pool);
+            Ok(reward_pool)
+        }
 
-            Ok(session_delta)
+        #[ink(message)]
+        pub fn deduct_from_reward_pool(&mut self, amount: Balance) -> Result<(), Error> {
+            let _ = self.only_callable_by(self.node_reward_contract)?;
+            self.accumulative_reward_pool = self.accumulative_reward_pool.saturating_sub(amount);
+            Ok(())
         }
 
         fn calculate_session_delta(
@@ -191,6 +210,12 @@ mod mining_pool {
         ) -> Result<(), Error> {
             let _ = self.only_callable_by(self.admin);
             self.merchant_contract = merchant_contract;
+            Ok(())
+        }
+        #[ink(message)]
+        pub fn send_to(&mut self, to: AccountId, amount: Balance) -> Result<(), Error> {
+            let _ = self.only_callable_by(self.admin);
+            let _ = self.env().transfer(to, amount);
             Ok(())
         }
 

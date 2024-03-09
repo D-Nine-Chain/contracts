@@ -63,6 +63,7 @@ mod node_reward {
         #[ink(topic)]
         amount: Balance,
     }
+    
 
     impl NodeReward {
         /// Constructor that initializes the `bool` value to the given `init_value`.
@@ -137,8 +138,8 @@ mod node_reward {
         #[ink(message)]
         pub fn withdraw_reward(
             &mut self,
-            node_id: AccountId,
-            receiver: AccountId
+            node_id: AccountId
+           
         ) -> Result<(), Error> {
             let caller = self.env().caller();
             let _ = self.validate_withdraw(node_id, caller)?;
@@ -146,14 +147,14 @@ mod node_reward {
             if reward_balance == 0 {
                 return Err(Error::NothingToWithdraw);
             }
-            let payment_request_result = self.tell_mining_pool_to_pay(receiver, reward_balance);
+            let payment_request_result = self.tell_mining_pool_to_pay(caller, reward_balance);
             if payment_request_result.is_err() {
                 return Err(Error::ErrorIssuingPayment);
             }
             let _ = self.deduct_node_reward(node_id)?;
             self.env().emit_event(NodeRewardPaid {
                 node: node_id,
-                receiver,
+                receiver:caller,
                 amount: reward_balance,
             });
             Ok(())
@@ -178,6 +179,20 @@ mod node_reward {
         }
 
         #[ink(message)]
+        pub fn set_authorized_receiver(&mut self, node_id: AccountId, receiver: AccountId) -> Result<(), Error> {
+            self.only_callable_by(node_id)?;
+            self.authorized_reward_receiver.insert(node_id, &receiver);
+            Ok(())
+        }
+
+        #[ink(message)]
+        pub fn remove_authorized_receiver(&mut self, node_id: AccountId) -> Result<(), Error> {
+            self.only_callable_by(node_id)?;
+            self.authorized_reward_receiver.remove(node_id);
+            Ok(())
+        }
+
+        #[ink(message)]
         pub fn update_rewards(
             &mut self,
             last_session: u32,
@@ -185,7 +200,7 @@ mod node_reward {
         ) -> Result<(), Error> {
             self.only_callable_by(self.rewards_pallet)?;
             let mut nodes_and_votes_vec: Vec<(AccountId, u64)> = sorted_nodes_and_votes.clone();
-            let current_active_validators = self.get_active_validators()?;
+            // let current_active_validators = self.get_active_validators()?;
             let mut total_paid_out: Balance = 0;
             let reward_pool = self.get_reward_pool(last_session)?;
             // from pallet it is truncated to limit of MaxCandidates
@@ -200,10 +215,11 @@ mod node_reward {
                 }
                 let node_tier = get_node_tier_result.unwrap();
                 let node_share = self.calc_single_node_share(reward_pool, node_tier);
-                if
-                    node_and_votes.1 >= self.vote_limit &&
-                    current_active_validators.contains(&node_and_votes.0)
-                {
+                // if
+                //     node_and_votes.1 >= self.vote_limit &&
+                //     current_active_validators.contains(&node_and_votes.0)
+                // {
+                  if node_and_votes.1 >= self.vote_limit {
                     let node_id: AccountId = node_and_votes.0;
                     let _ = self.credit_node_reward(node_id, node_share)?;
                     total_paid_out = total_paid_out.saturating_add(node_share);
@@ -231,13 +247,13 @@ mod node_reward {
             Ok(())
         }
 
-        fn get_active_validators(&self) -> Result<Vec<AccountId>, Error> {
-            let retrieve_validators_result = self.env().extension().get_active_validators();
-            match retrieve_validators_result {
-                Ok(validators) => Ok(validators),
-                Err(_) => Err(Error::ErrorGettingCurrentValidators),
-            }
-        }
+        // fn get_active_validators(&self) -> Result<Vec<AccountId>, Error> {
+        //     let retrieve_validators_result = self.env().extension().get_active_validators();
+        //     match retrieve_validators_result {
+        //         Ok(validators) => Ok(validators),
+        //         Err(_) => Err(Error::ErrorGettingCurrentValidators),
+        //     }
+        // }
 
         fn credit_node_reward(
             &mut self,

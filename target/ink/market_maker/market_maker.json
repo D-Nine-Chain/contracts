@@ -1,12 +1,12 @@
 {
   "source": {
-    "hash": "0x61f1dc95435ae5803dfbffebf0c363472e6a88c5dc102cdba59369a313940104",
+    "hash": "0x60517ca0fab9b489db5c2024e2021c0fb348582c069d81367855ca778a810b3a",
     "language": "ink! 4.3.0",
-    "compiler": "rustc 1.72.0",
+    "compiler": "rustc 1.72.1",
     "build_info": {
       "build_mode": "Release",
       "cargo_contract_version": "3.2.0",
-      "rust_toolchain": "stable-aarch64-apple-darwin",
+      "rust_toolchain": "stable-x86_64-apple-darwin",
       "wasm_opt_settings": {
         "keep_debug_symbols": false,
         "optimization_passes": "Z"
@@ -90,20 +90,20 @@
         "displayName": [
           "ChainExtension"
         ],
-        "type": 25
+        "type": 24
       },
       "hash": {
         "displayName": [
           "Hash"
         ],
-        "type": 24
+        "type": 23
       },
       "maxEventTopics": 4,
       "timestamp": {
         "displayName": [
           "Timestamp"
         ],
-        "type": 23
+        "type": 22
       }
     },
     "events": [
@@ -123,10 +123,23 @@
           {
             "docs": [],
             "indexed": true,
-            "label": "direction",
+            "label": "d9",
             "type": {
-              "displayName": [],
-              "type": 22
+              "displayName": [
+                "Balance"
+              ],
+              "type": 4
+            }
+          },
+          {
+            "docs": [],
+            "indexed": true,
+            "label": "usdt",
+            "type": {
+              "displayName": [
+                "Balance"
+              ],
+              "type": 4
             }
           },
           {
@@ -137,12 +150,112 @@
               "displayName": [
                 "Timestamp"
               ],
-              "type": 23
+              "type": 22
             }
           }
         ],
         "docs": [],
         "label": "CurrencySwap"
+      },
+      {
+        "args": [
+          {
+            "docs": [],
+            "indexed": true,
+            "label": "account_id",
+            "type": {
+              "displayName": [
+                "AccountId"
+              ],
+              "type": 0
+            }
+          },
+          {
+            "docs": [],
+            "indexed": true,
+            "label": "d9",
+            "type": {
+              "displayName": [
+                "Balance"
+              ],
+              "type": 4
+            }
+          },
+          {
+            "docs": [],
+            "indexed": true,
+            "label": "usdt",
+            "type": {
+              "displayName": [
+                "Balance"
+              ],
+              "type": 4
+            }
+          },
+          {
+            "docs": [],
+            "indexed": true,
+            "label": "time",
+            "type": {
+              "displayName": [
+                "Timestamp"
+              ],
+              "type": 22
+            }
+          }
+        ],
+        "docs": [],
+        "label": "LiquidityAdded"
+      },
+      {
+        "args": [
+          {
+            "docs": [],
+            "indexed": true,
+            "label": "account_id",
+            "type": {
+              "displayName": [
+                "AccountId"
+              ],
+              "type": 0
+            }
+          },
+          {
+            "docs": [],
+            "indexed": true,
+            "label": "d9",
+            "type": {
+              "displayName": [
+                "Balance"
+              ],
+              "type": 4
+            }
+          },
+          {
+            "docs": [],
+            "indexed": true,
+            "label": "usdt",
+            "type": {
+              "displayName": [
+                "Balance"
+              ],
+              "type": 4
+            }
+          },
+          {
+            "docs": [],
+            "indexed": true,
+            "label": "time",
+            "type": {
+              "displayName": [
+                "Timestamp"
+              ],
+              "type": 22
+            }
+          }
+        ],
+        "docs": [],
+        "label": "LiquidityRemoved"
       }
     ],
     "lang_error": {
@@ -1378,23 +1491,12 @@
       "id": 22,
       "type": {
         "def": {
-          "tuple": [
-            21,
-            21
-          ]
-        }
-      }
-    },
-    {
-      "id": 23,
-      "type": {
-        "def": {
           "primitive": "u64"
         }
       }
     },
     {
-      "id": 24,
+      "id": 23,
       "type": {
         "def": {
           "composite": {
@@ -1414,7 +1516,7 @@
       }
     },
     {
-      "id": 25,
+      "id": 24,
       "type": {
         "def": {
           "variant": {}

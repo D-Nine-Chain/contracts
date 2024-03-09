@@ -44,9 +44,44 @@ mod market_maker {
         // initiator of swap
         #[ink(topic)]
         account_id: AccountId,
-        // from => to
+        // d9 swapped
         #[ink(topic)]
-        direction: (Direction, Direction),
+        d9: Balance,
+        // usdt swapped
+        #[ink(topic)]
+        usdt: Balance,
+        // time of execution
+        #[ink(topic)]
+        time: Timestamp,
+    }
+
+    #[ink(event)]
+    pub struct LiquidityAdded {
+        // liquidity provider
+        #[ink(topic)]
+        account_id: AccountId,
+        // liquidity added
+        #[ink(topic)]
+        d9: Balance,
+        // usdt liquidity
+        #[ink(topic)]
+        usdt: Balance,
+        // time of execution
+        #[ink(topic)]
+        time: Timestamp,
+    }
+
+    #[ink(event)]
+    pub struct LiquidityRemoved {
+        // liquidity provider
+        #[ink(topic)]
+        account_id: AccountId,
+        // d9 liquidity
+        #[ink(topic)]
+        d9: Balance,
+        // usdt liquidity
+        #[ink(topic)]
+        usdt: Balance,
         // time of execution
         #[ink(topic)]
         time: Timestamp,
@@ -185,6 +220,13 @@ mod market_maker {
 
             self.mint_lp_tokens(caller, d9_liquidity, usdt_liquidity);
 
+            self.env().emit_event(LiquidityAdded {
+                account_id: caller,
+                d9: d9_liquidity,
+                usdt: usdt_liquidity,
+                time: self.env().block_timestamp(),
+            });
+
             Ok(())
         }
 
@@ -229,6 +271,13 @@ mod market_maker {
             // update liquidity provider
             self.total_lp_tokens = self.total_lp_tokens.saturating_sub(lp_tokens);
             self.liquidity_providers.remove(&caller);
+
+            self.env().emit_event(LiquidityRemoved {
+                account_id: caller,
+                usdt: usdt_liquidity.to_num(),
+                d9: d9_liquidity.to_num(),
+                time: self.env().block_timestamp(),
+            });
 
             Ok((
                 d9_plus_fee_portion.to_num::<Balance>(),
@@ -357,6 +406,13 @@ mod market_maker {
                 return Err(Error::MarketMakerHasInsufficientFunds(Currency::D9));
             }
 
+            self.env().emit_event(CurrencySwap {
+                account_id: caller,
+                d9: d9_minus_fee,
+                usdt: usdt,
+                time: self.env().block_timestamp(),
+            });
+
             Ok(d9)
         }
 
@@ -382,6 +438,13 @@ mod market_maker {
             // send usdt
             let caller = self.env().caller();
             self.send_usdt_to_user(caller, usdt.clone())?;
+
+            self.env().emit_event(CurrencySwap {
+                account_id: caller,
+                d9: d9,
+                usdt: usdt,
+                time: self.env().block_timestamp(),
+            });
 
             Ok(usdt)
         }

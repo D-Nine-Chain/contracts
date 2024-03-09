@@ -1,12 +1,12 @@
 {
   "source": {
-    "hash": "0x8a3c2b831b2b38a93b9a672052ef67e1e44752ef1a6657b2651fd990eafc52b8",
+    "hash": "0x0cf5fbf9a9dd4057bfc9f674a402a956f97b7fa536545a43c79362842fda587e",
     "language": "ink! 4.3.0",
-    "compiler": "rustc 1.72.0",
+    "compiler": "rustc 1.72.1",
     "build_info": {
       "build_mode": "Release",
       "cargo_contract_version": "3.2.0",
-      "rust_toolchain": "stable-aarch64-apple-darwin",
+      "rust_toolchain": "stable-x86_64-apple-darwin",
       "wasm_opt_settings": {
         "keep_debug_symbols": false,
         "optimization_passes": "Z"
@@ -310,15 +310,6 @@
               ],
               "type": 0
             }
-          },
-          {
-            "label": "receiver",
-            "type": {
-              "displayName": [
-                "AccountId"
-              ],
-              "type": 0
-            }
           }
         ],
         "default": false,
@@ -412,6 +403,67 @@
           "type": 18
         },
         "selector": "0x7a99af59"
+      },
+      {
+        "args": [
+          {
+            "label": "node_id",
+            "type": {
+              "displayName": [
+                "AccountId"
+              ],
+              "type": 0
+            }
+          },
+          {
+            "label": "receiver",
+            "type": {
+              "displayName": [
+                "AccountId"
+              ],
+              "type": 0
+            }
+          }
+        ],
+        "default": false,
+        "docs": [],
+        "label": "set_authorized_receiver",
+        "mutates": true,
+        "payable": false,
+        "returnType": {
+          "displayName": [
+            "ink",
+            "MessageResult"
+          ],
+          "type": 8
+        },
+        "selector": "0x0aa2247a"
+      },
+      {
+        "args": [
+          {
+            "label": "node_id",
+            "type": {
+              "displayName": [
+                "AccountId"
+              ],
+              "type": 0
+            }
+          }
+        ],
+        "default": false,
+        "docs": [],
+        "label": "remove_authorized_receiver",
+        "mutates": true,
+        "payable": false,
+        "returnType": {
+          "displayName": [
+            "ink",
+            "MessageResult"
+          ],
+          "type": 8
+        },
+        "selector": "0x58920ed0"
       },
       {
         "args": [

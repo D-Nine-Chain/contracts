@@ -75,7 +75,12 @@ mod mining_pool {
                 accumulative_reward_pool: 0,
             }
         }
-
+        // #[ink(message)]
+        // pub fn reset_accumulative_reward_pool(&mut self) -> Result<(), Error> {
+        //     let _ = self.only_callable_by(self.admin)?;
+        //     self.accumulative_reward_pool = 0;
+        //     Ok(())
+        // }
         #[ink(message)]
         pub fn get_accumulative_reward_pool(&self) -> Balance {
             self.accumulative_reward_pool

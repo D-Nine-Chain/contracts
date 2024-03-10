@@ -1,12 +1,12 @@
 {
   "source": {
-    "hash": "0x24f4e371417268cbefeb022da8f9cd7f550a8706c1741f10c565f9098e4a31e2",
+    "hash": "0x6ad9cda55fde88186df5dc7f260ced5a77975b6f1c7c050abb54b53d88d7ac27",
     "language": "ink! 4.3.0",
-    "compiler": "rustc 1.72.0",
+    "compiler": "rustc 1.72.1",
     "build_info": {
       "build_mode": "Release",
       "cargo_contract_version": "3.2.0",
-      "rust_toolchain": "stable-aarch64-apple-darwin",
+      "rust_toolchain": "stable-x86_64-apple-darwin",
       "wasm_opt_settings": {
         "keep_debug_symbols": false,
         "optimization_passes": "Z"
@@ -500,50 +500,6 @@
           "type": 6
         },
         "selector": "0x694fb50f"
-      },
-      {
-        "args": [
-          {
-            "label": "burn_contract",
-            "type": {
-              "displayName": [
-                "AccountId"
-              ],
-              "type": 0
-            }
-          },
-          {
-            "label": "user",
-            "type": {
-              "displayName": [
-                "AccountId"
-              ],
-              "type": 0
-            }
-          },
-          {
-            "label": "amount",
-            "type": {
-              "displayName": [
-                "Balance"
-              ],
-              "type": 4
-            }
-          }
-        ],
-        "default": false,
-        "docs": [],
-        "label": "update_data",
-        "mutates": true,
-        "payable": false,
-        "returnType": {
-          "displayName": [
-            "ink",
-            "MessageResult"
-          ],
-          "type": 17
-        },
-        "selector": "0x0590a9a1"
       },
       {
         "args": [

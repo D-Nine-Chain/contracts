@@ -46,6 +46,8 @@ mod cross_chain_transfer {
         pub amount: u128,
     }
 
+
+
     #[derive(Encode, Decode, Debug, PartialEq, Eq, Copy, Clone)]
     #[cfg_attr(feature = "std", derive(scale_info::TypeInfo, ink::storage::traits::StorageLayout))]
     pub enum Chain {
@@ -357,7 +359,7 @@ mod cross_chain_transfer {
             Ok(())
         }
 
-        pub fn receive_usdt(&self, sender: AccountId, amount: Balance) -> Result<(), Error> {
+         fn receive_usdt(&self, sender: AccountId, amount: Balance) -> Result<(), Error> {
             build_call::<D9Environment>()
                 .call(self.usdt_contract)
                 .gas_limit(0)
@@ -372,7 +374,7 @@ mod cross_chain_transfer {
                 .invoke()
         }
 
-        pub fn send_usdt(&self, recipient: AccountId, amount: Balance) -> Result<(), Error> {
+         fn send_usdt(&self, recipient: AccountId, amount: Balance) -> Result<(), Error> {
             build_call::<D9Environment>()
                 .call(self.usdt_contract)
                 .gas_limit(0)

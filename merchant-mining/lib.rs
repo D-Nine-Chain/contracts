@@ -73,7 +73,6 @@ mod d9_merchant_mining {
         D9,
         USDT,
     }
-
     #[derive(Encode, Decode, Debug, PartialEq, Eq, Copy, Clone)]
     #[cfg_attr(feature = "std", derive(scale_info::TypeInfo))]
     pub struct Direction(Currency, Currency);
@@ -92,69 +91,6 @@ mod d9_merchant_mining {
     pub struct GreenPointsResult {
         merchant: Balance,
         consumer: Balance,
-    }
-
-    #[ink(event)]
-    pub struct SubscriptionUpdated {
-        #[ink(topic)]
-        account_id: AccountId,
-        #[ink(topic)]
-        usdt: Balance,
-        #[ink(topic)]
-        expiry: Timestamp,
-    }
-
-    #[ink(event)]
-    pub struct D9Redeemed {
-        #[ink(topic)]
-        account_id: AccountId,
-        #[ink(topic)]
-        redeemed_d9: Balance,
-    }
-
-    #[derive(Encode, Decode, Debug, PartialEq, Eq, Copy, Clone)]
-    #[cfg_attr(feature = "std", derive(scale_info::TypeInfo))]
-    pub enum USDTConsumptionPurpose {
-        Gift,
-        Payment,
-        Subscription,
-    }
-
-    #[ink(event)]
-    pub struct USDTConsumed {
-        #[ink(topic)]
-        amount: Balance,
-        purpose: USDTConsumptionPurpose,
-    }
-
-    #[ink(event)]
-    pub struct ConsumerReceivedPoints {
-        #[ink(topic)]
-        merchant_account: AccountId,
-        #[ink(topic)]
-        consumer_account: AccountId,
-        #[ink(topic)]
-        points: Balance,
-    }
-
-    #[ink(event)]
-    pub struct MerchantReceivedPoints {
-        #[ink(topic)]
-        merchant_account: AccountId,
-        #[ink(topic)]
-        points: Balance,
-    }
-
-    #[ink(event)]
-    pub struct PaymentSent {
-        #[ink(topic)]
-        merchant_account: AccountId,
-        #[ink(topic)]
-        consumer_account: AccountId,
-        #[ink(topic)]
-        amount: Balance,
-        #[ink(topic)]
-        currency: Currency,
     }
 
     #[derive(Encode, Decode, Debug, PartialEq, Eq, Copy, Clone)]
@@ -199,6 +135,7 @@ mod d9_merchant_mining {
         CallRuntimeFailed,
         EcdsaRecoveryFailed,
         ErrorGettingEstimate,
+        CrossContractCallErrorGettingEstimate,
     }
 
     impl From<EnvError> for Error {
@@ -222,11 +159,21 @@ mod d9_merchant_mining {
     }
 
     #[ink(event)]
-    pub struct SubscriptionCreated {
+    pub struct SubscriptionExtended {
         #[ink(topic)]
         account_id: AccountId,
         #[ink(topic)]
+        usdt: Balance,
+        #[ink(topic)]
         expiry: Timestamp,
+    }
+
+    #[ink(event)]
+    pub struct D9Redeemed {
+        #[ink(topic)]
+        account_id: AccountId,
+        #[ink(topic)]
+        redeemed_d9: Balance,
     }
 
     // event for creation of green points
@@ -237,6 +184,19 @@ mod d9_merchant_mining {
         #[ink(topic)]
         consumer: GreenPointsCreated,
     }
+
+    #[ink(event)]
+    pub struct PaymentSent {
+        #[ink(topic)]
+        merchant: AccountId,
+        #[ink(topic)]
+        consumer: AccountId,
+        #[ink(topic)]
+        amount: Balance,
+        #[ink(topic)]
+        currency: Currency,
+    }
+
     // a struct associated with the GreenPointsTransaction event
     #[derive(Encode, Decode, Debug, PartialEq, Eq, Copy, Clone)]
     #[cfg_attr(feature = "std", derive(scale_info::TypeInfo))]
@@ -283,9 +243,18 @@ mod d9_merchant_mining {
             }
 
             let update_expiry_result = self.update_subscription(merchant_id, usdt_amount);
-
             update_expiry_result
         }
+
+        /// get the total of d9 processed by this contract e.g. d9 used to get green points
+        // #[ink(message)]
+        // pub fn get_total_merchant_processed_d9(&self) -> Balance {
+        //     self.processed_d9
+        // }
+
+        // fn credit_pool(&mut self, amount: Balance) {
+        //     self.processed_d9 = self.processed_d9.saturating_add(amount);
+        // }
 
         ///create/update subscription, returns new expiry `Timestamp` Result
         fn update_subscription(
@@ -310,18 +279,11 @@ mod d9_merchant_mining {
             };
             let new_expiry = current_expiry.saturating_add(months.saturating_mul(one_month));
             self.merchant_expiry.insert(account_id.clone(), &new_expiry);
-
-            self.env().emit_event(SubscriptionUpdated {
+            self.env().emit_event(SubscriptionExtended {
                 account_id,
-                usdt:amount,
+                usdt: amount,
                 expiry: new_expiry,
             });
-
-            self.env().emit_event(USDTConsumed {
-                amount,
-                purpose: USDTConsumptionPurpose::Subscription,
-            });
-
             Ok(new_expiry)
         }
 
@@ -383,6 +345,7 @@ mod d9_merchant_mining {
             if let Some(ancestors) = self.get_ancestors(caller) {
                 let _ = self.update_ancestors_coefficients(&ancestors, time_based_red_points);
             }
+
             self.env().emit_event(D9Redeemed {
                 account_id: caller,
                 redeemed_d9: d9_amount,
@@ -417,11 +380,11 @@ mod d9_merchant_mining {
             let merchant_id = self.env().caller();
             self.validate_merchant(merchant_id)?;
             let d9_amount = self.env().transferred_value();
-            let get_usdt_estimate_result = self.estimate_usdt(d9_amount)?;
-            let usdt_amount = get_usdt_estimate_result;
+            let usdt_amount = self.estimate_usdt(d9_amount)?;
             // Convert to USDT and delegate to give_green_points_internal
-
-            self.give_green_points_internal(consumer_id, usdt_amount)
+            let green_points_result = self.give_green_points_internal(consumer_id, usdt_amount);
+            self.call_mining_pool_to_process(d9_amount)?;
+            Ok(green_points_result)
         }
 
         #[ink(message)]
@@ -434,19 +397,19 @@ mod d9_merchant_mining {
             self.validate_merchant(merchant_id)?;
             self.validate_usdt_transfer(merchant_id, usdt_payment)?;
             self.receive_usdt_from_user(merchant_id, usdt_payment)?;
-            self.env().emit_event(USDTConsumed {
-                amount: usdt_payment,
-                purpose: USDTConsumptionPurpose::Gift,
-            });
+
             // Delegate to give_green_points_internal
-            self.give_green_points_internal(consumer_id, usdt_payment)
+            let green_points_result = self.give_green_points_internal(consumer_id, usdt_payment);
+            let d9_amount = self.convert_to_d9(usdt_payment)?;
+            self.call_mining_pool_to_process(d9_amount)?;
+            Ok(green_points_result)
         }
 
         fn give_green_points_internal(
             &mut self,
             consumer_id: AccountId,
             amount: Balance,
-        ) -> Result<GreenPointsResult, Error> {
+        ) -> GreenPointsResult {
             // Calculate green points
             let usdt_amount_to_green = amount.saturating_mul(100).saturating_div(16);
             let consumer_green_points = self.calculate_green_points(usdt_amount_to_green);
@@ -458,29 +421,23 @@ mod d9_merchant_mining {
             self.add_green_points(self.env().caller(), merchant_green_points);
 
             // Convert to D9, send to mining pool, and credit pool
-            let d9_amount = self.convert_to_d9(amount)?;
-            self.call_mining_pool_to_process(d9_amount)?;
 
-            self.env().emit_event(USDTConsumed {
-                amount,
-                purpose: USDTConsumptionPurpose::Payment,
+            // Emit event
+            self.env().emit_event(GreenPointsTransaction {
+                merchant: GreenPointsCreated {
+                    account_id: self.env().caller(),
+                    green_points: merchant_green_points,
+                },
+                consumer: GreenPointsCreated {
+                    account_id: consumer_id,
+                    green_points: consumer_green_points,
+                },
             });
 
-            self.env().emit_event(ConsumerReceivedPoints {
-                merchant_account: self.env().caller(),
-                consumer_account: consumer_id,
-                points: consumer_green_points,
-            });
-
-            self.env().emit_event(MerchantReceivedPoints {
-                merchant_account: self.env().caller(),
-                points: merchant_green_points,
-            });
-
-            Ok(GreenPointsResult {
+            GreenPointsResult {
                 merchant: merchant_green_points,
                 consumer: consumer_green_points,
-            })
+            }
         }
 
         #[ink(message, payable)]
@@ -493,19 +450,12 @@ mod d9_merchant_mining {
             let _ = self.validate_merchant(merchant_id)?;
             let _ = self.validate_usdt_transfer(consumer_id, usdt_amount)?;
             let _ = self.receive_usdt_from_user(consumer_id, usdt_amount);
-
             self.env().emit_event(PaymentSent {
-                merchant_account: merchant_id,
-                consumer_account: consumer_id,
+                merchant: merchant_id,
+                consumer: consumer_id,
                 amount: usdt_amount,
                 currency: Currency::USDT,
             });
-
-            self.env().emit_event(USDTConsumed {
-                amount: usdt_amount,
-                purpose: USDTConsumptionPurpose::Payment,
-            });
-
             self.finish_processing_payment(consumer_id, merchant_id, usdt_amount)
         }
 
@@ -531,14 +481,12 @@ mod d9_merchant_mining {
 
             //process payments
             let usdt_amount = conversion_result.unwrap();
-
             self.env().emit_event(PaymentSent {
-                merchant_account: merchant_id,
-                consumer_account: payer,
+                merchant: merchant_id,
+                consumer: payer,
                 amount: d9_amount,
                 currency: Currency::D9,
             });
-
             self.finish_processing_payment(payer, merchant_id, usdt_amount)
         }
 
@@ -576,9 +524,15 @@ mod d9_merchant_mining {
             let _ = self.call_mining_pool_to_process(d9_amount)?;
 
             // self.credit_pool(d9_amount);
-            self.env().emit_event(MerchantReceivedPoints {
-                merchant_account: merchant_id,
-                points: merchant_green_points,
+            self.env().emit_event(GreenPointsTransaction {
+                merchant: GreenPointsCreated {
+                    account_id: merchant_id,
+                    green_points: merchant_green_points,
+                },
+                consumer: GreenPointsCreated {
+                    account_id: consumer_id,
+                    green_points: consumer_green_points,
+                },
             });
 
             Ok(GreenPointsResult {
@@ -803,14 +757,20 @@ mod d9_merchant_mining {
                         .push_arg(amount),
                 )
                 .returns::<Result<(Balance, Balance), Error>>()
-                .try_invoke()?;
+                .try_invoke();
             // this result will return the value or some error from the contract itself
+            if cross_contract_call_result.is_err() {
+                return Err(Error::CrossContractCallErrorGettingEstimate);
+            }
             let method_call_result = cross_contract_call_result.unwrap();
             if method_call_result.is_err() {
                 return Err(Error::ErrorGettingEstimate);
             }
-
-            let usdt_balance = method_call_result.unwrap().1;
+            let something = method_call_result.unwrap();
+            if something.is_err() {
+                return Err(Error::ErrorGettingEstimate);
+            }
+            let usdt_balance = something.unwrap().1;
             Ok(usdt_balance)
         }
 

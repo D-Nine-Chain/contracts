@@ -1,6 +1,6 @@
 {
   "source": {
-    "hash": "0x60517ca0fab9b489db5c2024e2021c0fb348582c069d81367855ca778a810b3a",
+    "hash": "0xc1fc38d5d07756f5ed7215bf9b5b084543c1573fe13c8425a430f7d481bd375f",
     "language": "ink! 4.3.0",
     "compiler": "rustc 1.72.1",
     "build_info": {
@@ -145,12 +145,12 @@
           {
             "docs": [],
             "indexed": true,
-            "label": "time",
+            "label": "direction",
             "type": {
               "displayName": [
-                "Timestamp"
+                "Direction"
               ],
-              "type": 22
+              "type": 21
             }
           }
         ],

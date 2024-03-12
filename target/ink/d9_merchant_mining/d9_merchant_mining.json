@@ -1,6 +1,6 @@
 {
   "source": {
-    "hash": "0xa3a88043cfcc4d27923a50d902ae2aeaf8a504e4514d905e86c6e7a98a9ce9ae",
+    "hash": "0x1f2d65beb80c80012a54345d63800e10fec090d3dd652e2705db00cb7c88d10a",
     "language": "ink! 4.3.0",
     "compiler": "rustc 1.72.1",
     "build_info": {
@@ -86,19 +86,19 @@
         "displayName": [
           "BlockNumber"
         ],
-        "type": 27
+        "type": 26
       },
       "chainExtension": {
         "displayName": [
           "ChainExtension"
         ],
-        "type": 28
+        "type": 27
       },
       "hash": {
         "displayName": [
           "Hash"
         ],
-        "type": 26
+        "type": 25
       },
       "maxEventTopics": 4,
       "timestamp": {
@@ -146,7 +146,7 @@
           }
         ],
         "docs": [],
-        "label": "SubscriptionUpdated"
+        "label": "SubscriptionExtended"
       },
       {
         "args": [
@@ -181,35 +181,35 @@
           {
             "docs": [],
             "indexed": true,
-            "label": "amount",
+            "label": "merchant",
             "type": {
               "displayName": [
-                "Balance"
+                "GreenPointsCreated"
               ],
-              "type": 1
+              "type": 23
             }
           },
           {
             "docs": [],
-            "indexed": false,
-            "label": "purpose",
+            "indexed": true,
+            "label": "consumer",
             "type": {
               "displayName": [
-                "USDTConsumptionPurpose"
+                "GreenPointsCreated"
               ],
               "type": 23
             }
           }
         ],
         "docs": [],
-        "label": "USDTConsumed"
+        "label": "GreenPointsTransaction"
       },
       {
         "args": [
           {
             "docs": [],
             "indexed": true,
-            "label": "merchant_account",
+            "label": "merchant",
             "type": {
               "displayName": [
                 "AccountId"
@@ -220,74 +220,7 @@
           {
             "docs": [],
             "indexed": true,
-            "label": "consumer_account",
-            "type": {
-              "displayName": [
-                "AccountId"
-              ],
-              "type": 2
-            }
-          },
-          {
-            "docs": [],
-            "indexed": true,
-            "label": "points",
-            "type": {
-              "displayName": [
-                "Balance"
-              ],
-              "type": 1
-            }
-          }
-        ],
-        "docs": [],
-        "label": "ConsumerReceivedPoints"
-      },
-      {
-        "args": [
-          {
-            "docs": [],
-            "indexed": true,
-            "label": "merchant_account",
-            "type": {
-              "displayName": [
-                "AccountId"
-              ],
-              "type": 2
-            }
-          },
-          {
-            "docs": [],
-            "indexed": true,
-            "label": "points",
-            "type": {
-              "displayName": [
-                "Balance"
-              ],
-              "type": 1
-            }
-          }
-        ],
-        "docs": [],
-        "label": "MerchantReceivedPoints"
-      },
-      {
-        "args": [
-          {
-            "docs": [],
-            "indexed": true,
-            "label": "merchant_account",
-            "type": {
-              "displayName": [
-                "AccountId"
-              ],
-              "type": 2
-            }
-          },
-          {
-            "docs": [],
-            "indexed": true,
-            "label": "consumer_account",
+            "label": "consumer",
             "type": {
               "displayName": [
                 "AccountId"
@@ -320,62 +253,6 @@
         ],
         "docs": [],
         "label": "PaymentSent"
-      },
-      {
-        "args": [
-          {
-            "docs": [],
-            "indexed": true,
-            "label": "account_id",
-            "type": {
-              "displayName": [
-                "AccountId"
-              ],
-              "type": 2
-            }
-          },
-          {
-            "docs": [],
-            "indexed": true,
-            "label": "expiry",
-            "type": {
-              "displayName": [
-                "Timestamp"
-              ],
-              "type": 0
-            }
-          }
-        ],
-        "docs": [],
-        "label": "SubscriptionCreated"
-      },
-      {
-        "args": [
-          {
-            "docs": [],
-            "indexed": true,
-            "label": "merchant",
-            "type": {
-              "displayName": [
-                "GreenPointsCreated"
-              ],
-              "type": 25
-            }
-          },
-          {
-            "docs": [],
-            "indexed": true,
-            "label": "consumer",
-            "type": {
-              "displayName": [
-                "GreenPointsCreated"
-              ],
-              "type": 25
-            }
-          }
-        ],
-        "docs": [],
-        "label": "GreenPointsTransaction"
       }
     ],
     "lang_error": {
@@ -1277,6 +1154,10 @@
               {
                 "index": 38,
                 "name": "ErrorGettingEstimate"
+              },
+              {
+                "index": 39,
+                "name": "CrossContractCallErrorGettingEstimate"
               }
             ]
           }
@@ -1735,19 +1616,17 @@
       "id": 23,
       "type": {
         "def": {
-          "variant": {
-            "variants": [
+          "composite": {
+            "fields": [
               {
-                "index": 0,
-                "name": "Gift"
+                "name": "account_id",
+                "type": 2,
+                "typeName": "AccountId"
               },
               {
-                "index": 1,
-                "name": "Payment"
-              },
-              {
-                "index": 2,
-                "name": "Subscription"
+                "name": "green_points",
+                "type": 1,
+                "typeName": "Balance"
               }
             ]
           }
@@ -1755,7 +1634,7 @@
         "path": [
           "d9_merchant_mining",
           "d9_merchant_mining",
-          "USDTConsumptionPurpose"
+          "GreenPointsCreated"
         ]
       }
     },
@@ -1790,32 +1669,6 @@
           "composite": {
             "fields": [
               {
-                "name": "account_id",
-                "type": 2,
-                "typeName": "AccountId"
-              },
-              {
-                "name": "green_points",
-                "type": 1,
-                "typeName": "Balance"
-              }
-            ]
-          }
-        },
-        "path": [
-          "d9_merchant_mining",
-          "d9_merchant_mining",
-          "GreenPointsCreated"
-        ]
-      }
-    },
-    {
-      "id": 26,
-      "type": {
-        "def": {
-          "composite": {
-            "fields": [
-              {
                 "type": 3,
                 "typeName": "[u8; 32]"
               }
@@ -1830,7 +1683,7 @@
       }
     },
     {
-      "id": 27,
+      "id": 26,
       "type": {
         "def": {
           "primitive": "u32"
@@ -1838,7 +1691,7 @@
       }
     },
     {
-      "id": 28,
+      "id": 27,
       "type": {
         "def": {
           "variant": {}

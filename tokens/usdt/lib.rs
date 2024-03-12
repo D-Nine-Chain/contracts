@@ -12,12 +12,22 @@ pub mod d9_usdt {
     }
 
     #[ink(event)]
-    pub struct D9USDTTransfer {
+    pub struct Approval {
         #[ink(topic)]
-        from: AccountId,
+        owner: AccountId,
         #[ink(topic)]
-        to: AccountId,
-        amount: Balance,
+        spender: AccountId,
+        amount: u128,
+    }
+
+    // (3)
+    #[ink(event)]
+    pub struct Transfer {
+        #[ink(topic)]
+        from: Option<AccountId>,
+        #[ink(topic)]
+        to: Option<AccountId>,
+        value: u128,
     }
 
     #[ink(storage)]
@@ -35,25 +45,38 @@ pub mod d9_usdt {
                 .expect("Should mint");
             _instance
         }
+    }
 
-        //   #[ink(message)]
-        //   pub fn approve(
-        //       &mut self,
-        //       owner: AccountId,
-        //       spender: AccountId,
-        //       amount: Balance
-        //   ) -> Result<(), PSP22Error> {
-        //       psp22::Internal::_approve_from_to(self, owner, spender, amount)
-        //   }
+    impl D9USDT {
+        #[ink(message)]
+        pub fn transfer(
+            &mut self,
+            to: AccountId,
+            value: u128,
+            _data: Vec<u8>,
+        ) -> Result<(), PSP22Error> {
+          psp22::Internal::_transfer_from_to(self, self.env().caller(), to, value, _data)?; // Update!
+            self.env().emit_event(Transfer {
+                from: Some(self.env().caller()),
+                to: Some(to),
+                value,
+            });
+            Ok(())
+        }
 
-        //   #[ink(message)]
-        //   pub fn transfer_from(
-        //       &mut self,
-        //       from: AccountId,
-        //       to: AccountId,
-        //       amount: Balance
-        //   ) -> Result<(), PSP22Error> {
-        //       psp22::Internal::_transfer_from_to(self, from, to, amount, [0u8].to_vec())
-        //   }
+        #[ink(message)]
+        pub fn transfer_from(&mut self,from:AccountId, to:AccountId, value:Balance, _data:Vec<u8>) -> Result<(), PSP22Error> {
+            let allowance = psp22::Internal::_allowance(self, &from, &self.env().caller());
+            if allowance < value {
+                return Err(PSP22Error::InsufficientAllowance);
+            }
+            psp22::Internal::_transfer_from_to(self, from, to, value, _data)?; // Update!
+            self.env().emit_event(Transfer {
+                from: Some(from),
+                to: Some(to),
+                value,
+            });
+            Ok(())
+        }
     }
 }

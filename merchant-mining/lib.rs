@@ -252,6 +252,9 @@ mod d9_merchant_mining {
             }
 
             let update_expiry_result = self.update_subscription(merchant_id, usdt_amount);
+
+
+
             update_expiry_result
         }
 

@@ -1,6 +1,6 @@
 {
   "source": {
-    "hash": "0xeb45d46cb87226d794b06c95694eda121ded34f86fc8b12ed5335a25e182373f",
+    "hash": "0x6e0eaec1512315978981967d4f9d6072c6a3f50381289c69205961fa9509fff9",
     "language": "ink! 4.3.0",
     "compiler": "rustc 1.72.1",
     "build_info": {
@@ -1152,6 +1152,10 @@
               {
                 "index": 15,
                 "name": "USDTTooMuch"
+              },
+              {
+                "index": 16,
+                "name": "LiquidityTooLow"
               }
             ]
           }

@@ -52,7 +52,7 @@ mod market_maker {
         usdt: Balance,
         // time of execution
         #[ink(topic)]
-        time: Timestamp,
+        direction: Direction,
     }
 
     #[ink(event)]
@@ -412,7 +412,7 @@ mod market_maker {
                 account_id: caller,
                 d9: d9_minus_fee,
                 usdt: usdt,
-                time: self.env().block_timestamp(),
+                direction: Direction(Currency::USDT,Currency::D9)
             });
 
             Ok(d9)
@@ -445,7 +445,7 @@ mod market_maker {
                 account_id: caller,
                 d9: d9,
                 usdt: usdt,
-                time: self.env().block_timestamp(),
+                direction:Direction(Currency::D9,Currency::USDT)
             });
 
             Ok(usdt)

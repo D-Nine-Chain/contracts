@@ -3,14 +3,13 @@ pub use d9_chain_extension::D9Environment;
 #[ink::contract(env = D9Environment)]
 mod market_maker {
     use super::*;
-    use ink::env::call::{build_call, ExecutionInput, Selector};
-    use ink::selector_bytes;
+    use scale::{ Decode, Encode };
     use ink::storage::Mapping;
-    use scale::{Decode, Encode};
+    use ink::selector_bytes;
     use sp_arithmetic::Perbill;
-    use substrate_fixed::{types::extra::U30, FixedU128};
-    type FixedBalance = FixedU128<U30>;
-    use ink::env::Error as EnvError;
+    use ink::env::call::{ build_call, ExecutionInput, Selector };
+    use substrate_fixed::{ FixedU128, types::extra::U12 };
+    type FixedBalance = FixedU128<U12>;
     #[ink(storage)]
     pub struct MarketMaker {
         /// contract for usdt coin
@@ -39,55 +38,49 @@ mod market_maker {
     #[cfg_attr(feature = "std", derive(scale_info::TypeInfo))]
     pub struct Direction(Currency, Currency);
 
+
+
     #[ink(event)]
-    pub struct CurrencySwap {
-        // initiator of swap
+    pub struct LiquidityAdded{
         #[ink(topic)]
         account_id: AccountId,
-        // d9 swapped
-        #[ink(topic)]
-        d9: Balance,
-        // usdt swapped
         #[ink(topic)]
         usdt: Balance,
-        // time of execution
         #[ink(topic)]
-        direction: Direction,
+        d9: Balance,
+  
     }
 
     #[ink(event)]
-    pub struct LiquidityAdded {
-        // liquidity provider
+    pub struct LiquidityRemoved{
         #[ink(topic)]
         account_id: AccountId,
-        // liquidity added
-        #[ink(topic)]
-        d9: Balance,
-        // usdt liquidity
         #[ink(topic)]
         usdt: Balance,
-        // time of execution
         #[ink(topic)]
-        time: Timestamp,
+        d9: Balance,
+
     }
 
     #[ink(event)]
-    pub struct LiquidityRemoved {
-        // liquidity provider
+    pub struct D9ToUSDTConversion{
         #[ink(topic)]
         account_id: AccountId,
-        // d9 liquidity
-        #[ink(topic)]
-        d9: Balance,
-        // usdt liquidity
         #[ink(topic)]
         usdt: Balance,
-        // time of execution
         #[ink(topic)]
-        time: Timestamp,
+        d9: Balance,
     }
 
-
+    #[ink(event)]
+    pub struct USDTToD9Conversion{
+        #[ink(topic)]
+        account_id: AccountId,
+        #[ink(topic)]
+        usdt: Balance,
+        #[ink(topic)]
+        d9: Balance,
+    }
 
     #[derive(Encode, Decode, Debug, PartialEq, Eq, Copy, Clone)]
     #[cfg_attr(feature = "std", derive(scale_info::TypeInfo))]
@@ -108,44 +101,6 @@ mod market_maker {
         MultiplicationError,
         USDTTooSmall,
         USDTTooMuch,
-        SomeEnvironmentError,
-        CalledContractTrapped,
-        CalledContractReverted,
-        NotCallable,
-        SomeDecodeError,
-        SomeOffChainError,
-        CalleeTrapped,
-        CalleeReverted,
-        KeyNotFound,
-        _BelowSubsistenceThreshold,
-        EnvironmentalTransferFailed,
-        _EndowmentTooLow,
-        CodeNotFound,
-        Unknown,
-        LoggingDisabled,
-        CallRuntimeFailed,
-        EcdsaRecoveryFailed,
-        WithdrawalAmountExceedsBalance,
-    }
-
-    impl From<EnvError> for Error {
-        fn from(error: EnvError) -> Self {
-            match error {
-                EnvError::CalleeTrapped => Self::CalledContractTrapped,
-                EnvError::CalleeReverted => Self::CalledContractReverted,
-                EnvError::NotCallable => Self::NotCallable,
-                EnvError::KeyNotFound => Self::KeyNotFound,
-                EnvError::_BelowSubsistenceThreshold => Self::_BelowSubsistenceThreshold,
-                EnvError::TransferFailed => Self::EnvironmentalTransferFailed,
-                EnvError::_EndowmentTooLow => Self::_EndowmentTooLow,
-                EnvError::CodeNotFound => Self::CodeNotFound,
-                EnvError::Unknown => Self::Unknown,
-                EnvError::LoggingDisabled => Self::LoggingDisabled,
-                EnvError::CallRuntimeFailed => Self::CallRuntimeFailed,
-                EnvError::EcdsaRecoveryFailed => Self::EcdsaRecoveryFailed,
-                _ => Self::SomeEnvironmentError,
-            }
-        }
     }
 
     impl MarketMaker {
@@ -153,7 +108,7 @@ mod market_maker {
         pub fn new(
             usdt_contract: AccountId,
             fee_percent: u32,
-            liquidity_tolerance_percent: u32,
+            liquidity_tolerance_percent: u32
         ) -> Self {
             assert!(
                 0 <= liquidity_tolerance_percent && liquidity_tolerance_percent <= 100,
@@ -172,10 +127,7 @@ mod market_maker {
 
         #[ink(message)]
         pub fn change_admin(&mut self, new_admin: AccountId) {
-            assert!(
-                self.env().caller() == self.admin,
-                "Only admin can change admin."
-            );
+            assert!(self.env().caller() == self.admin, "Only admin can change admin.");
             self.admin = new_admin;
         }
 
@@ -224,16 +176,16 @@ mod market_maker {
 
             self.env().emit_event(LiquidityAdded {
                 account_id: caller,
-                d9: d9_liquidity,
                 usdt: usdt_liquidity,
-                time: self.env().block_timestamp(),
+                d9: d9_liquidity,
+            
             });
 
             Ok(())
         }
 
         #[ink(message)]
-        pub fn remove_liquidity(&mut self) -> Result<(Balance, Balance), Error> {
+        pub fn remove_liquidity(&mut self) -> Result<(), Error> {
             let caller = self.env().caller();
             let (d9_reserves, usdt_reserves) = self.get_currency_reserves();
 
@@ -242,17 +194,16 @@ mod market_maker {
                 return Err(Error::LiquidityProviderNotFound);
             }
 
-            // Calculate  liquidity contribution
+            // Calculate  contribution
             let liquidity_percent = self.calculate_lp_percent(lp_tokens);
             let d9_liquidity = liquidity_percent.saturating_mul_int(d9_reserves);
             let usdt_liquidity = liquidity_percent.saturating_mul_int(usdt_reserves);
 
             // get fee portion
-            let fee_portion =
-                liquidity_percent.saturating_mul(FixedBalance::from_num(self.fee_total));
-            self.fee_total = self
-                .fee_total
-                .saturating_sub(fee_portion.to_num::<Balance>());
+            let fee_portion = liquidity_percent.saturating_mul(
+                FixedBalance::from_num(self.fee_total)
+            );
+            self.fee_total = self.fee_total.saturating_sub(fee_portion.to_num::<Balance>());
 
             let d9_plus_fee_portion = d9_liquidity.saturating_add(fee_portion);
 
@@ -264,8 +215,10 @@ mod market_maker {
                 return Err(Error::MarketMakerHasInsufficientFunds(Currency::D9));
             }
 
-            let send_usdt_result =
-                self.send_usdt_to_user(caller, usdt_liquidity.to_num::<Balance>());
+            let send_usdt_result = self.send_usdt_to_user(
+                caller,
+                usdt_liquidity.to_num::<Balance>()
+            );
             if send_usdt_result.is_err() {
                 return Err(Error::MarketMakerHasInsufficientFunds(Currency::USDT));
             }
@@ -276,15 +229,11 @@ mod market_maker {
 
             self.env().emit_event(LiquidityRemoved {
                 account_id: caller,
-                usdt: usdt_liquidity.to_num(),
-                d9: d9_liquidity.to_num(),
-                time: self.env().block_timestamp(),
+                usdt: usdt_liquidity.to_num::<Balance>(),
+                d9: d9_liquidity.to_num::<Balance>(),
             });
-
-            Ok((
-                d9_plus_fee_portion.to_num::<Balance>(),
-                usdt_liquidity.to_num::<Balance>(),
-            ))
+            
+            Ok(())
         }
         /// Modifies the code which is used to execute calls to this contract address (`AccountId`).
         ///
@@ -294,17 +243,17 @@ mod market_maker {
         pub fn set_code(&mut self, code_hash: [u8; 32]) {
             let caller = self.env().caller();
             assert!(caller == self.admin, "Only admin can set code hash.");
-            ink::env::set_code_hash(&code_hash).unwrap_or_else(|err| {
-                panic!(
-                    "Failed to `set_code_hash` to {:?} due to {:?}",
-                    code_hash, err
-                )
-            });
+            ink::env
+                ::set_code_hash(&code_hash)
+                .unwrap_or_else(|err| {
+                    panic!("Failed to `set_code_hash` to {:?} due to {:?}", code_hash, err)
+                });
             ink::env::debug_println!("Switched code hash to {:?}.", code_hash);
         }
         fn calculate_lp_percent(&self, lp_tokens: Balance) -> FixedBalance {
-            let percent_provided = FixedBalance::from_num(lp_tokens)
-                .checked_div(FixedBalance::from_num(self.total_lp_tokens));
+            let percent_provided = FixedBalance::from_num(lp_tokens).checked_div(
+                FixedBalance::from_num(self.total_lp_tokens)
+            );
             if percent_provided.is_none() {
                 return FixedBalance::from_num(0);
             }
@@ -315,7 +264,7 @@ mod market_maker {
         pub fn check_new_liquidity(
             &self,
             usdt_liquidity: Balance,
-            d9_liquidity: Balance,
+            d9_liquidity: Balance
         ) -> Result<(), Error> {
             let (d9_reserves, usdt_reserves) = self.get_currency_reserves();
             let fixed_usdt_reserves = FixedBalance::from_num(usdt_reserves);
@@ -332,9 +281,9 @@ mod market_maker {
                 }
             };
 
-            let checked_threshold_percent =
-                FixedBalance::from_num(self.liquidity_tolerance_percent)
-                    .checked_div(FixedBalance::from_num(100));
+            let checked_threshold_percent = FixedBalance::from_num(
+                self.liquidity_tolerance_percent
+            ).checked_div(FixedBalance::from_num(100));
             let threshold_percent = match checked_threshold_percent {
                 Some(t) => t,
                 None => {
@@ -354,7 +303,7 @@ mod market_maker {
                 fixed_d9_reserves
                     .saturating_add(fixed_d9_liquidity)
                     .checked_div(fixed_usdt_reserves.saturating_add(fixed_usdt_liquidity))
-                    .unwrap_or(FixedBalance::from_num(0)),
+                    .unwrap_or(FixedBalance::from_num(0))
             );
 
             let price_difference = {
@@ -366,10 +315,12 @@ mod market_maker {
             };
 
             if threshold < price_difference {
-                return Err(Error::LiquidityAddedBeyondTolerance(
-                    threshold.to_num::<Balance>(),
-                    price_difference.to_num::<Balance>(),
-                ));
+                return Err(
+                    Error::LiquidityAddedBeyondTolerance(
+                        threshold.to_num::<Balance>(),
+                        price_difference.to_num::<Balance>()
+                    )
+                );
             }
             Ok(())
         }
@@ -391,8 +342,10 @@ mod market_maker {
             }
 
             //prepare d9 to send
-            let d9_calc_result =
-                self.calculate_exchange(Direction(Currency::USDT, Currency::D9), usdt);
+            let d9_calc_result = self.calculate_exchange(
+                Direction(Currency::USDT, Currency::D9),
+                usdt
+            );
             if let Err(e) = d9_calc_result {
                 return Err(e);
             }
@@ -408,11 +361,10 @@ mod market_maker {
                 return Err(Error::MarketMakerHasInsufficientFunds(Currency::D9));
             }
 
-            self.env().emit_event(CurrencySwap {
+            self.env().emit_event(D9ToUSDTConversion {
                 account_id: caller,
+                usdt,
                 d9: d9_minus_fee,
-                usdt: usdt,
-                direction: Direction(Currency::USDT,Currency::D9)
             });
 
             Ok(d9)
@@ -441,11 +393,10 @@ mod market_maker {
             let caller = self.env().caller();
             self.send_usdt_to_user(caller, usdt.clone())?;
 
-            self.env().emit_event(CurrencySwap {
+            self.env().emit_event(USDTToD9Conversion {
                 account_id: caller,
-                d9: d9,
-                usdt: usdt,
-                direction:Direction(Currency::D9,Currency::USDT)
+                usdt,
+                d9,
             });
 
             Ok(usdt)
@@ -456,10 +407,9 @@ mod market_maker {
             &mut self,
             provider_id: AccountId,
             new_d9_liquidity: Balance,
-            new_usdt_liquidity: Balance,
+            new_usdt_liquidity: Balance
         ) {
-            let provider_current_lp = self
-                .liquidity_providers
+            let provider_current_lp = self.liquidity_providers
                 .get(&provider_id)
                 .unwrap_or_default();
 
@@ -469,8 +419,7 @@ mod market_maker {
 
             let updated_provider_lp = provider_current_lp.saturating_add(new_lp_tokens);
 
-            self.liquidity_providers
-                .insert(provider_id, &updated_provider_lp);
+            self.liquidity_providers.insert(provider_id, &updated_provider_lp);
         }
 
         /// calculate lp tokens based on usdt liquidity
@@ -478,7 +427,7 @@ mod market_maker {
         pub fn calc_new_lp_tokens(
             &mut self,
             d9_liquidity: Balance,
-            usdt_liquidity: Balance,
+            usdt_liquidity: Balance
         ) -> Balance {
             // Initialize LP tokens if the pool is empty
             if self.total_lp_tokens == 0 {
@@ -517,7 +466,7 @@ mod market_maker {
         pub fn calculate_exchange(
             &self,
             direction: Direction,
-            amount_0: Balance,
+            amount_0: Balance
         ) -> Result<Balance, Error> {
             //naming comes from Direction. e.g. direction.0 is the first currency in the pair
             // get currency balances
@@ -535,7 +484,7 @@ mod market_maker {
         pub fn estimate_exchange(
             &self,
             direction: Direction,
-            amount_0: Balance,
+            amount_0: Balance
         ) -> Result<(Balance, Balance), Error> {
             let balance_0: Balance = self.get_currency_balance(direction.0);
             let balance_1: Balance = self.get_currency_balance(direction.1);
@@ -547,7 +496,7 @@ mod market_maker {
             let amount_1 = self.calc_opposite_currency_amount(
                 balance_0.saturating_add(amount_0),
                 balance_1,
-                amount_0,
+                amount_0
             )?;
             Ok((amount_0, amount_1))
         }
@@ -556,7 +505,7 @@ mod market_maker {
             &self,
             balance_0: Balance,
             balance_1: Balance,
-            amount_0: Balance,
+            amount_0: Balance
         ) -> Result<Balance, Error> {
             let fixed_balance_0 = FixedBalance::from_num(balance_0);
             let fixed_balance_1 = FixedBalance::from_num(balance_1);
@@ -589,7 +538,7 @@ mod market_maker {
         pub fn check_usdt_balance(
             &self,
             account_id: AccountId,
-            amount: Balance,
+            amount: Balance
         ) -> Result<(), Error> {
             let usdt_balance = self.get_usdt_balance(account_id);
 
@@ -604,8 +553,9 @@ mod market_maker {
                 .call(self.usdt_contract)
                 .gas_limit(0)
                 .exec_input(
-                    ExecutionInput::new(Selector::new(selector_bytes!("PSP22::balance_of")))
-                        .push_arg(account_id),
+                    ExecutionInput::new(
+                        Selector::new(selector_bytes!("PSP22::balance_of"))
+                    ).push_arg(account_id)
                 )
                 .returns::<Balance>()
                 .invoke()
@@ -618,7 +568,7 @@ mod market_maker {
                 .exec_input(
                     ExecutionInput::new(Selector::new(selector_bytes!("PSP22::allowance")))
                         .push_arg(owner)
-                        .push_arg(self.env().account_id()),
+                        .push_arg(self.env().account_id())
                 )
                 .returns::<Balance>()
                 .invoke();
@@ -631,28 +581,27 @@ mod market_maker {
         pub fn send_usdt_to_user(
             &self,
             recipient: AccountId,
-            amount: Balance,
+            amount: Balance
         ) -> Result<(), Error> {
-            let result = build_call::<D9Environment>()
+            build_call::<D9Environment>()
                 .call(self.usdt_contract)
                 .gas_limit(0)
                 .exec_input(
                     ExecutionInput::new(Selector::new(selector_bytes!("PSP22::transfer")))
                         .push_arg(recipient)
                         .push_arg(amount)
-                        .push_arg([0u8]),
+                        .push_arg([0u8])
                 )
                 .returns::<Result<(), Error>>()
-                .try_invoke()?;
-            result.unwrap()
+                .invoke()
         }
 
         pub fn receive_usdt_from_user(
             &self,
             sender: AccountId,
-            amount: Balance,
+            amount: Balance
         ) -> Result<(), Error> {
-            let result = build_call::<D9Environment>()
+            build_call::<D9Environment>()
                 .call(self.usdt_contract)
                 .gas_limit(0)
                 .exec_input(
@@ -660,11 +609,10 @@ mod market_maker {
                         .push_arg(sender)
                         .push_arg(self.env().account_id())
                         .push_arg(amount)
-                        .push_arg([0u8]),
+                        .push_arg([0u8])
                 )
                 .returns::<Result<(), Error>>()
-                .try_invoke()?;
-            result.unwrap()
+                .invoke()
         }
     }
 
@@ -672,7 +620,7 @@ mod market_maker {
     mod tests {
         use super::*;
         use ink::env::test::default_accounts;
-        use substrate_fixed::{types::extra::U6, FixedU128};
+        use substrate_fixed::{ FixedU128, types::extra::U6 };
         type FixedBalance = FixedU128<U6>;
         use sp_arithmetic::Perbill;
         //   #[ink::test]
@@ -817,9 +765,9 @@ mod market_maker {
     #[cfg(all(test, feature = "e2e-tests"))]
     mod e2e_tests {
         use super::*;
-        use d9_usdt::d9_usdt::D9USDTRef;
+        use ink_e2e::{ build_message, account_id, AccountKeyring };
         use d9_usdt::d9_usdt::D9USDT;
-        use ink_e2e::{account_id, build_message, AccountKeyring};
+        use d9_usdt::d9_usdt::D9USDTRef;
         //   use openbrush::contracts::psp22::psp22_external::PSP22;
         type E2EResult<T> = std::result::Result<T, Box<dyn std::error::Error>>;
 
@@ -830,29 +778,22 @@ mod market_maker {
             let usdt_liquidity: Balance = 10_000_00;
             let usdt_constructor = D9USDTRef::new(initial_supply);
             let usdt_address = client
-                .instantiate("d9_usdt", &ink_e2e::alice(), usdt_constructor, 0, None)
-                .await
-                .expect("failed to instantiate usdt")
-                .account_id;
+                .instantiate("d9_usdt", &ink_e2e::alice(), usdt_constructor, 0, None).await
+                .expect("failed to instantiate usdt").account_id;
 
             // init market maker
             let amm_constructor = MarketMakerRef::new(usdt_address, 1, 100, 10);
             let amm_address = client
-                .instantiate("market_maker", &ink_e2e::alice(), amm_constructor, 0, None)
-                .await
-                .expect("failed to instantiate market maker")
-                .account_id;
+                .instantiate("market_maker", &ink_e2e::alice(), amm_constructor, 0, None).await
+                .expect("failed to instantiate market maker").account_id;
 
             //build approval message
             let caller = account_id(AccountKeyring::Alice);
-            let check_liquidity_message = build_message::<MarketMakerRef>(amm_address.clone())
-                .call(|market_maker| {
-                    market_maker.check_new_liquidity(d9_liquidity, usdt_liquidity)
-                });
+            let check_liquidity_message = build_message::<MarketMakerRef>(amm_address.clone()).call(
+                |market_maker| market_maker.check_new_liquidity(d9_liquidity, usdt_liquidity)
+            );
 
-            let response = client
-                .call(&ink_e2e::alice(), check_liquidity_message, 0, None)
-                .await;
+            let response = client.call(&ink_e2e::alice(), check_liquidity_message, 0, None).await;
             // execute approval call
             assert!(response.is_ok());
             Ok(())
@@ -862,29 +803,29 @@ mod market_maker {
             let initial_supply: Balance = 100_000_000_000_000;
             let usdt_constructor = D9USDTRef::new(initial_supply);
             let usdt_address = client
-                .instantiate("d9_usdt", &ink_e2e::alice(), usdt_constructor, 0, None)
-                .await
-                .expect("failed to instantiate usdt")
-                .account_id;
+                .instantiate("d9_usdt", &ink_e2e::alice(), usdt_constructor, 0, None).await
+                .expect("failed to instantiate usdt").account_id;
 
             // init market maker
             let amm_constructor = MarketMakerRef::new(usdt_address, 1, 100, 3);
             let amm_address = client
-                .instantiate("market_maker", &ink_e2e::alice(), amm_constructor, 0, None)
-                .await
-                .expect("failed to instantiate market maker")
-                .account_id;
+                .instantiate("market_maker", &ink_e2e::alice(), amm_constructor, 0, None).await
+                .expect("failed to instantiate market maker").account_id;
 
             //build approval message
             let caller = account_id(AccountKeyring::Alice);
-            let check_usdt_balance_message = build_message::<MarketMakerRef>(amm_address.clone())
-                .call(|market_maker| {
-                    market_maker.check_usdt_balance(caller, initial_supply.saturating_div(2000))
-                });
+            let check_usdt_balance_message = build_message::<MarketMakerRef>(
+                amm_address.clone()
+            ).call(|market_maker|
+                market_maker.check_usdt_balance(caller, initial_supply.saturating_div(2000))
+            );
 
-            let response = client
-                .call(&ink_e2e::alice(), check_usdt_balance_message, 0, None)
-                .await;
+            let response = client.call(
+                &ink_e2e::alice(),
+                check_usdt_balance_message,
+                0,
+                None
+            ).await;
             // execute approval call
             assert!(response.is_ok());
             Ok(())
@@ -896,45 +837,41 @@ mod market_maker {
             let initial_supply: Balance = 100_000_000_000_000;
             let usdt_constructor = D9USDTRef::new(initial_supply);
             let usdt_address = client
-                .instantiate("d9_usdt", &ink_e2e::alice(), usdt_constructor, 0, None)
-                .await
-                .expect("failed to instantiate usdt")
-                .account_id;
+                .instantiate("d9_usdt", &ink_e2e::alice(), usdt_constructor, 0, None).await
+                .expect("failed to instantiate usdt").account_id;
             // init market maker
             let amm_constructor = MarketMakerRef::new(usdt_address, 1, 100, 3);
             let amm_address = client
-                .instantiate("market_maker", &ink_e2e::alice(), amm_constructor, 0, None)
-                .await
-                .expect("failed to instantiate market maker")
-                .account_id;
+                .instantiate("market_maker", &ink_e2e::alice(), amm_constructor, 0, None).await
+                .expect("failed to instantiate market maker").account_id;
 
             //build approval message
             let usdt_approved_amount = initial_supply.saturating_div(2000);
-            let approval_message =
-                build_message::<D9USDTRef>(usdt_address.clone()).call(|d9_usdt| {
-                    d9_usdt.approve(
-                        ink_e2e::account_id(ink_e2e::AccountKeyring::Alice),
-                        amm_address.clone(),
-                        usdt_approved_amount,
-                    )
-                });
+            let approval_message = build_message::<D9USDTRef>(usdt_address.clone()).call(|d9_usdt|
+                d9_usdt.approve(
+                    ink_e2e::account_id(ink_e2e::AccountKeyring::Alice),
+                    amm_address.clone(),
+                    usdt_approved_amount
+                )
+            );
             // execute approval call
-            let approval_response = client
-                .call(&ink_e2e::alice(), approval_message, 0, None)
-                .await;
+            let approval_response = client.call(&ink_e2e::alice(), approval_message, 0, None).await;
             assert!(approval_response.is_ok());
 
             //check allowance
             let caller = account_id(AccountKeyring::Alice);
-            let check_usdt_allowance_message = build_message::<MarketMakerRef>(amm_address.clone())
-                .call(|market_maker| {
-                    market_maker
-                        .check_usdt_allowance(caller, usdt_approved_amount.saturating_div(10))
-                });
+            let check_usdt_allowance_message = build_message::<MarketMakerRef>(
+                amm_address.clone()
+            ).call(|market_maker|
+                market_maker.check_usdt_allowance(caller, usdt_approved_amount.saturating_div(10))
+            );
 
-            let response = client
-                .call(&ink_e2e::alice(), check_usdt_allowance_message, 0, None)
-                .await;
+            let response = client.call(
+                &ink_e2e::alice(),
+                check_usdt_allowance_message,
+                0,
+                None
+            ).await;
             // execute approval call
             assert!(response.is_ok());
             Ok(())
@@ -984,47 +921,39 @@ mod market_maker {
             let initial_supply: Balance = 100_000_000_000_000;
             let usdt_constructor = D9USDTRef::new(initial_supply);
             let usdt_address = client
-                .instantiate("d9_usdt", &ink_e2e::alice(), usdt_constructor, 0, None)
-                .await
-                .expect("failed to instantiate usdt")
-                .account_id;
+                .instantiate("d9_usdt", &ink_e2e::alice(), usdt_constructor, 0, None).await
+                .expect("failed to instantiate usdt").account_id;
             // init market maker
             let amm_constructor = MarketMakerRef::new(usdt_address, 1, 100, 3);
             let amm_address = client
-                .instantiate("market_maker", &ink_e2e::alice(), amm_constructor, 0, None)
-                .await
-                .expect("failed to instantiate market maker")
-                .account_id;
+                .instantiate("market_maker", &ink_e2e::alice(), amm_constructor, 0, None).await
+                .expect("failed to instantiate market maker").account_id;
 
             //build approval message
             let usdt_approval_amount = 100_000_000_000_000;
-            let approval_message =
-                build_message::<D9USDTRef>(usdt_address.clone()).call(|d9_usdt| {
-                    d9_usdt.approve(
-                        ink_e2e::account_id(ink_e2e::AccountKeyring::Alice),
-                        amm_address.clone(),
-                        usdt_approval_amount,
-                    )
-                });
+            let approval_message = build_message::<D9USDTRef>(usdt_address.clone()).call(|d9_usdt|
+                d9_usdt.approve(
+                    ink_e2e::account_id(ink_e2e::AccountKeyring::Alice),
+                    amm_address.clone(),
+                    usdt_approval_amount
+                )
+            );
             // execute approval call
-            let approval_response = client
-                .call(&ink_e2e::alice(), approval_message, 0, None)
-                .await;
+            let approval_response = client.call(&ink_e2e::alice(), approval_message, 0, None).await;
             assert!(approval_response.is_ok());
 
             // add liquidity
             let usdt_liquidity_amount = usdt_approval_amount.saturating_div(20);
             let d9_liquidity_amount = usdt_liquidity_amount.saturating_div(10);
-            let add_liquidity_message = build_message::<MarketMakerRef>(amm_address.clone())
-                .call(|market_maker| market_maker.add_liquidity(usdt_liquidity_amount));
-            let add_liquidity_response = client
-                .call(
-                    &ink_e2e::alice(),
-                    add_liquidity_message,
-                    d9_liquidity_amount,
-                    None,
-                )
-                .await;
+            let add_liquidity_message = build_message::<MarketMakerRef>(amm_address.clone()).call(
+                |market_maker| market_maker.add_liquidity(usdt_liquidity_amount)
+            );
+            let add_liquidity_response = client.call(
+                &ink_e2e::alice(),
+                add_liquidity_message,
+                d9_liquidity_amount,
+                None
+            ).await;
 
             assert!(add_liquidity_response.is_ok());
             Ok(())

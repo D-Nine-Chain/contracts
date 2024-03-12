@@ -186,15 +186,24 @@ mod d9_merchant_mining {
     }
 
     #[ink(event)]
-    pub struct PaymentSent {
+    pub struct D9MerchantPaymentSent {
         #[ink(topic)]
         merchant: AccountId,
         #[ink(topic)]
         consumer: AccountId,
         #[ink(topic)]
         amount: Balance,
+
+    }
+    #[ink(event)]
+    pub struct USDTMerchantPaymentSent {
         #[ink(topic)]
-        currency: Currency,
+        merchant: AccountId,
+        #[ink(topic)]
+        consumer: AccountId,
+        #[ink(topic)]
+        amount: Balance,
+
     }
 
     // a struct associated with the GreenPointsTransaction event
@@ -450,11 +459,11 @@ mod d9_merchant_mining {
             let _ = self.validate_merchant(merchant_id)?;
             let _ = self.validate_usdt_transfer(consumer_id, usdt_amount)?;
             let _ = self.receive_usdt_from_user(consumer_id, usdt_amount);
-            self.env().emit_event(PaymentSent {
+            self.env().emit_event(USDTMerchantPaymentSent {
                 merchant: merchant_id,
                 consumer: consumer_id,
                 amount: usdt_amount,
-                currency: Currency::USDT,
+               
             });
             self.finish_processing_payment(consumer_id, merchant_id, usdt_amount)
         }
@@ -481,11 +490,10 @@ mod d9_merchant_mining {
 
             //process payments
             let usdt_amount = conversion_result.unwrap();
-            self.env().emit_event(PaymentSent {
+            self.env().emit_event(D9MerchantPaymentSent {
                 merchant: merchant_id,
                 consumer: payer,
                 amount: d9_amount,
-                currency: Currency::D9,
             });
             self.finish_processing_payment(payer, merchant_id, usdt_amount)
         }

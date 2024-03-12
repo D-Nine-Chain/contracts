@@ -1,6 +1,6 @@
 {
   "source": {
-    "hash": "0xc1fc38d5d07756f5ed7215bf9b5b084543c1573fe13c8425a430f7d481bd375f",
+    "hash": "0xeb45d46cb87226d794b06c95694eda121ded34f86fc8b12ed5335a25e182373f",
     "language": "ink! 4.3.0",
     "compiler": "rustc 1.72.1",
     "build_info": {
@@ -96,14 +96,14 @@
         "displayName": [
           "Hash"
         ],
-        "type": 23
+        "type": 22
       },
       "maxEventTopics": 4,
       "timestamp": {
         "displayName": [
           "Timestamp"
         ],
-        "type": 22
+        "type": 23
       }
     },
     "events": [
@@ -123,17 +123,6 @@
           {
             "docs": [],
             "indexed": true,
-            "label": "d9",
-            "type": {
-              "displayName": [
-                "Balance"
-              ],
-              "type": 4
-            }
-          },
-          {
-            "docs": [],
-            "indexed": true,
             "label": "usdt",
             "type": {
               "displayName": [
@@ -145,62 +134,12 @@
           {
             "docs": [],
             "indexed": true,
-            "label": "direction",
-            "type": {
-              "displayName": [
-                "Direction"
-              ],
-              "type": 21
-            }
-          }
-        ],
-        "docs": [],
-        "label": "CurrencySwap"
-      },
-      {
-        "args": [
-          {
-            "docs": [],
-            "indexed": true,
-            "label": "account_id",
-            "type": {
-              "displayName": [
-                "AccountId"
-              ],
-              "type": 0
-            }
-          },
-          {
-            "docs": [],
-            "indexed": true,
             "label": "d9",
             "type": {
               "displayName": [
                 "Balance"
               ],
               "type": 4
-            }
-          },
-          {
-            "docs": [],
-            "indexed": true,
-            "label": "usdt",
-            "type": {
-              "displayName": [
-                "Balance"
-              ],
-              "type": 4
-            }
-          },
-          {
-            "docs": [],
-            "indexed": true,
-            "label": "time",
-            "type": {
-              "displayName": [
-                "Timestamp"
-              ],
-              "type": 22
             }
           }
         ],
@@ -223,12 +162,40 @@
           {
             "docs": [],
             "indexed": true,
+            "label": "usdt",
+            "type": {
+              "displayName": [
+                "Balance"
+              ],
+              "type": 4
+            }
+          },
+          {
+            "docs": [],
+            "indexed": true,
             "label": "d9",
             "type": {
               "displayName": [
                 "Balance"
               ],
               "type": 4
+            }
+          }
+        ],
+        "docs": [],
+        "label": "LiquidityRemoved"
+      },
+      {
+        "args": [
+          {
+            "docs": [],
+            "indexed": true,
+            "label": "account_id",
+            "type": {
+              "displayName": [
+                "AccountId"
+              ],
+              "type": 0
             }
           },
           {
@@ -245,17 +212,56 @@
           {
             "docs": [],
             "indexed": true,
-            "label": "time",
+            "label": "d9",
             "type": {
               "displayName": [
-                "Timestamp"
+                "Balance"
               ],
-              "type": 22
+              "type": 4
             }
           }
         ],
         "docs": [],
-        "label": "LiquidityRemoved"
+        "label": "D9ToUSDTConversion"
+      },
+      {
+        "args": [
+          {
+            "docs": [],
+            "indexed": true,
+            "label": "account_id",
+            "type": {
+              "displayName": [
+                "AccountId"
+              ],
+              "type": 0
+            }
+          },
+          {
+            "docs": [],
+            "indexed": true,
+            "label": "usdt",
+            "type": {
+              "displayName": [
+                "Balance"
+              ],
+              "type": 4
+            }
+          },
+          {
+            "docs": [],
+            "indexed": true,
+            "label": "d9",
+            "type": {
+              "displayName": [
+                "Balance"
+              ],
+              "type": 4
+            }
+          }
+        ],
+        "docs": [],
+        "label": "USDTToD9Conversion"
       }
     ],
     "lang_error": {
@@ -376,7 +382,7 @@
             "ink",
             "MessageResult"
           ],
-          "type": 16
+          "type": 12
         },
         "selector": "0xbdd16bfa"
       },
@@ -468,7 +474,7 @@
             "ink",
             "MessageResult"
           ],
-          "type": 18
+          "type": 16
         },
         "selector": "0x0edab8e1"
       },
@@ -486,7 +492,7 @@
             "ink",
             "MessageResult"
           ],
-          "type": 18
+          "type": 16
         },
         "selector": "0x5b41ab8a"
       },
@@ -523,7 +529,7 @@
             "ink",
             "MessageResult"
           ],
-          "type": 20
+          "type": 18
         },
         "selector": "0xbdcee4ed"
       },
@@ -535,7 +541,7 @@
               "displayName": [
                 "Direction"
               ],
-              "type": 21
+              "type": 19
             }
           },
           {
@@ -560,7 +566,7 @@
             "ink",
             "MessageResult"
           ],
-          "type": 18
+          "type": 16
         },
         "selector": "0x2413eb9a"
       },
@@ -572,7 +578,7 @@
               "displayName": [
                 "Direction"
               ],
-              "type": 21
+              "type": 19
             }
           },
           {
@@ -595,7 +601,7 @@
             "ink",
             "MessageResult"
           ],
-          "type": 16
+          "type": 20
         },
         "selector": "0x06f49352"
       },
@@ -1146,78 +1152,6 @@
               {
                 "index": 15,
                 "name": "USDTTooMuch"
-              },
-              {
-                "index": 16,
-                "name": "SomeEnvironmentError"
-              },
-              {
-                "index": 17,
-                "name": "CalledContractTrapped"
-              },
-              {
-                "index": 18,
-                "name": "CalledContractReverted"
-              },
-              {
-                "index": 19,
-                "name": "NotCallable"
-              },
-              {
-                "index": 20,
-                "name": "SomeDecodeError"
-              },
-              {
-                "index": 21,
-                "name": "SomeOffChainError"
-              },
-              {
-                "index": 22,
-                "name": "CalleeTrapped"
-              },
-              {
-                "index": 23,
-                "name": "CalleeReverted"
-              },
-              {
-                "index": 24,
-                "name": "KeyNotFound"
-              },
-              {
-                "index": 25,
-                "name": "_BelowSubsistenceThreshold"
-              },
-              {
-                "index": 26,
-                "name": "EnvironmentalTransferFailed"
-              },
-              {
-                "index": 27,
-                "name": "_EndowmentTooLow"
-              },
-              {
-                "index": 28,
-                "name": "CodeNotFound"
-              },
-              {
-                "index": 29,
-                "name": "Unknown"
-              },
-              {
-                "index": 30,
-                "name": "LoggingDisabled"
-              },
-              {
-                "index": 31,
-                "name": "CallRuntimeFailed"
-              },
-              {
-                "index": 32,
-                "name": "EcdsaRecoveryFailed"
-              },
-              {
-                "index": 33,
-                "name": "WithdrawalAmountExceedsBalance"
               }
             ]
           }
@@ -1304,6 +1238,156 @@
               {
                 "fields": [
                   {
+                    "type": 4
+                  }
+                ],
+                "index": 0,
+                "name": "Ok"
+              },
+              {
+                "fields": [
+                  {
+                    "type": 14
+                  }
+                ],
+                "index": 1,
+                "name": "Err"
+              }
+            ]
+          }
+        },
+        "params": [
+          {
+            "name": "T",
+            "type": 4
+          },
+          {
+            "name": "E",
+            "type": 14
+          }
+        ],
+        "path": [
+          "Result"
+        ]
+      }
+    },
+    {
+      "id": 18,
+      "type": {
+        "def": {
+          "variant": {
+            "variants": [
+              {
+                "fields": [
+                  {
+                    "type": 4
+                  }
+                ],
+                "index": 0,
+                "name": "Ok"
+              },
+              {
+                "fields": [
+                  {
+                    "type": 7
+                  }
+                ],
+                "index": 1,
+                "name": "Err"
+              }
+            ]
+          }
+        },
+        "params": [
+          {
+            "name": "T",
+            "type": 4
+          },
+          {
+            "name": "E",
+            "type": 7
+          }
+        ],
+        "path": [
+          "Result"
+        ]
+      }
+    },
+    {
+      "id": 19,
+      "type": {
+        "def": {
+          "composite": {
+            "fields": [
+              {
+                "type": 15,
+                "typeName": "Currency"
+              },
+              {
+                "type": 15,
+                "typeName": "Currency"
+              }
+            ]
+          }
+        },
+        "path": [
+          "market_maker",
+          "market_maker",
+          "Direction"
+        ]
+      }
+    },
+    {
+      "id": 20,
+      "type": {
+        "def": {
+          "variant": {
+            "variants": [
+              {
+                "fields": [
+                  {
+                    "type": 21
+                  }
+                ],
+                "index": 0,
+                "name": "Ok"
+              },
+              {
+                "fields": [
+                  {
+                    "type": 7
+                  }
+                ],
+                "index": 1,
+                "name": "Err"
+              }
+            ]
+          }
+        },
+        "params": [
+          {
+            "name": "T",
+            "type": 21
+          },
+          {
+            "name": "E",
+            "type": 7
+          }
+        ],
+        "path": [
+          "Result"
+        ]
+      }
+    },
+    {
+      "id": 21,
+      "type": {
+        "def": {
+          "variant": {
+            "variants": [
+              {
+                "fields": [
+                  {
                     "type": 9
                   }
                 ],
@@ -1338,165 +1422,7 @@
       }
     },
     {
-      "id": 18,
-      "type": {
-        "def": {
-          "variant": {
-            "variants": [
-              {
-                "fields": [
-                  {
-                    "type": 19
-                  }
-                ],
-                "index": 0,
-                "name": "Ok"
-              },
-              {
-                "fields": [
-                  {
-                    "type": 7
-                  }
-                ],
-                "index": 1,
-                "name": "Err"
-              }
-            ]
-          }
-        },
-        "params": [
-          {
-            "name": "T",
-            "type": 19
-          },
-          {
-            "name": "E",
-            "type": 7
-          }
-        ],
-        "path": [
-          "Result"
-        ]
-      }
-    },
-    {
-      "id": 19,
-      "type": {
-        "def": {
-          "variant": {
-            "variants": [
-              {
-                "fields": [
-                  {
-                    "type": 4
-                  }
-                ],
-                "index": 0,
-                "name": "Ok"
-              },
-              {
-                "fields": [
-                  {
-                    "type": 14
-                  }
-                ],
-                "index": 1,
-                "name": "Err"
-              }
-            ]
-          }
-        },
-        "params": [
-          {
-            "name": "T",
-            "type": 4
-          },
-          {
-            "name": "E",
-            "type": 14
-          }
-        ],
-        "path": [
-          "Result"
-        ]
-      }
-    },
-    {
-      "id": 20,
-      "type": {
-        "def": {
-          "variant": {
-            "variants": [
-              {
-                "fields": [
-                  {
-                    "type": 4
-                  }
-                ],
-                "index": 0,
-                "name": "Ok"
-              },
-              {
-                "fields": [
-                  {
-                    "type": 7
-                  }
-                ],
-                "index": 1,
-                "name": "Err"
-              }
-            ]
-          }
-        },
-        "params": [
-          {
-            "name": "T",
-            "type": 4
-          },
-          {
-            "name": "E",
-            "type": 7
-          }
-        ],
-        "path": [
-          "Result"
-        ]
-      }
-    },
-    {
-      "id": 21,
-      "type": {
-        "def": {
-          "composite": {
-            "fields": [
-              {
-                "type": 15,
-                "typeName": "Currency"
-              },
-              {
-                "type": 15,
-                "typeName": "Currency"
-              }
-            ]
-          }
-        },
-        "path": [
-          "market_maker",
-          "market_maker",
-          "Direction"
-        ]
-      }
-    },
-    {
       "id": 22,
-      "type": {
-        "def": {
-          "primitive": "u64"
-        }
-      }
-    },
-    {
-      "id": 23,
       "type": {
         "def": {
           "composite": {
@@ -1513,6 +1439,14 @@
           "types",
           "Hash"
         ]
+      }
+    },
+    {
+      "id": 23,
+      "type": {
+        "def": {
+          "primitive": "u64"
+        }
       }
     },
     {

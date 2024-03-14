@@ -60,10 +60,8 @@ mod node_reward {
         node: AccountId,
         #[ink(topic)]
         receiver: AccountId,
-        #[ink(topic)]
         amount: Balance,
     }
-    
 
     impl NodeReward {
         /// Constructor that initializes the `bool` value to the given `init_value`.
@@ -136,11 +134,7 @@ mod node_reward {
         }
 
         #[ink(message)]
-        pub fn withdraw_reward(
-            &mut self,
-            node_id: AccountId
-           
-        ) -> Result<(), Error> {
+        pub fn withdraw_reward(&mut self, node_id: AccountId) -> Result<(), Error> {
             let caller = self.env().caller();
             let _ = self.validate_withdraw(node_id, caller)?;
             let reward_balance = self.node_reward.get(&node_id).unwrap_or(0);
@@ -154,7 +148,7 @@ mod node_reward {
             let _ = self.deduct_node_reward(node_id)?;
             self.env().emit_event(NodeRewardPaid {
                 node: node_id,
-                receiver:caller,
+                receiver: caller,
                 amount: reward_balance,
             });
             Ok(())
@@ -179,7 +173,11 @@ mod node_reward {
         }
 
         #[ink(message)]
-        pub fn set_authorized_receiver(&mut self, node_id: AccountId, receiver: AccountId) -> Result<(), Error> {
+        pub fn set_authorized_receiver(
+            &mut self,
+            node_id: AccountId,
+            receiver: AccountId
+        ) -> Result<(), Error> {
             self.only_callable_by(node_id)?;
             self.authorized_reward_receiver.insert(node_id, &receiver);
             Ok(())
@@ -215,11 +213,8 @@ mod node_reward {
                 }
                 let node_tier = get_node_tier_result.unwrap();
                 let node_share = self.calc_single_node_share(reward_pool, node_tier);
-                // if
-                //     node_and_votes.1 >= self.vote_limit &&
-                //     current_active_validators.contains(&node_and_votes.0)
-                // {
-                  if node_and_votes.1 >= self.vote_limit {
+
+                if node_and_votes.1 >= self.vote_limit {
                     let node_id: AccountId = node_and_votes.0;
                     let _ = self.credit_node_reward(node_id, node_share)?;
                     total_paid_out = total_paid_out.saturating_add(node_share);
@@ -320,15 +315,15 @@ mod node_reward {
 
         /// determine the rank of a node with respect to the session and other nodes
         fn node_tier_by_vec_position(&self, index: usize) -> Result<NodeTier, Error> {
-            if (0..8).contains(&index) {
+            if (0..9).contains(&index) {
                 Ok(NodeTier::Super(SuperNodeSubTier::Upper))
-            } else if (9..17).contains(&index) {
+            } else if (9..18).contains(&index) {
                 Ok(NodeTier::Super(SuperNodeSubTier::Middle))
-            } else if (18..26).contains(&index) {
+            } else if (18..27).contains(&index) {
                 Ok(NodeTier::Super(SuperNodeSubTier::Lower))
-            } else if (27..126).contains(&index) {
+            } else if (27..127).contains(&index) {
                 Ok(NodeTier::StandBy)
-            } else if (127..287).contains(&index) {
+            } else if (127..288).contains(&index) {
                 Ok(NodeTier::Candidate)
             } else {
                 Err(Error::BeyondQualificationForNodeStatus)

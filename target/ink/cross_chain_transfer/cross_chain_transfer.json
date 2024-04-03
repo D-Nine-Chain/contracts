@@ -1,12 +1,12 @@
 {
   "source": {
-    "hash": "0x0d80411fdf281b508af6efecde15017efcb9bfc3956636cd0fa8b97fbe69db55",
+    "hash": "0x4beac590e0c2e670b87997c893281c9eac45c8515e51bd96d7e31a660bc75db2",
     "language": "ink! 4.3.0",
-    "compiler": "rustc 1.72.1",
+    "compiler": "rustc 1.76.0",
     "build_info": {
       "build_mode": "Release",
-      "cargo_contract_version": "3.2.0",
-      "rust_toolchain": "stable-x86_64-apple-darwin",
+      "cargo_contract_version": "4.0.2",
+      "rust_toolchain": "stable-aarch64-apple-darwin",
       "wasm_opt_settings": {
         "keep_debug_symbols": false,
         "optimization_passes": "Z"
@@ -17,9 +17,10 @@
     "name": "cross_chain_transfer",
     "version": "0.1.0",
     "authors": [
-      "[your_name] <[your_email]>"
+      "D9 team tech@d9network.com"
     ]
   },
+  "image": null,
   "spec": {
     "constructors": [
       {

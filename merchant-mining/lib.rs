@@ -206,6 +206,15 @@ mod d9_merchant_mining {
 
     }
 
+    #[ink(event)]
+    pub struct GivePointsUSDT{
+        #[ink(topic)]
+        consumer: AccountId,
+        #[ink(topic)]
+        merchant: AccountId,
+        amount: Balance,
+    }
+
     // a struct associated with the GreenPointsTransaction event
     #[derive(Encode, Decode, Debug, PartialEq, Eq, Copy, Clone)]
     #[cfg_attr(feature = "std", derive(scale_info::TypeInfo))]
@@ -252,8 +261,6 @@ mod d9_merchant_mining {
             }
 
             let update_expiry_result = self.update_subscription(merchant_id, usdt_amount);
-
-
 
             update_expiry_result
         }
@@ -414,6 +421,11 @@ mod d9_merchant_mining {
             let green_points_result = self.give_green_points_internal(consumer_id, usdt_payment);
             let d9_amount = self.convert_to_d9(usdt_payment)?;
             self.call_mining_pool_to_process(d9_amount)?;
+            self.env().emit_event(GivePointsUSDT {
+                consumer: consumer_id,
+                merchant: merchant_id,
+                amount: usdt_payment,
+            });
             Ok(green_points_result)
         }
 

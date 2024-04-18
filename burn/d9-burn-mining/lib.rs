@@ -1,15 +1,15 @@
 #![cfg_attr(not(feature = "std"), no_std, no_main)]
 
-use d9_burn_common::{ Account, D9Environment, Error };
+use d9_burn_common::{Account, D9Environment, Error};
 
 #[ink::contract(env = D9Environment)]
 // #[ink::contract(env = D9Environment)]
 pub mod d9_burn_mining {
     use super::*;
+    use ink::prelude::vec::Vec;
     use ink::storage::Mapping;
     use sp_arithmetic::Perbill;
     use sp_arithmetic::Perquintill;
-    use ink::prelude::vec::Vec;
     #[ink(storage)]
     pub struct D9burnMining {
         ///total amount of tokens burned so far globally
@@ -47,11 +47,16 @@ pub mod d9_burn_mining {
             self.main_pool = new_main;
             Ok(())
         }
+        #[ink(message)]
+        pub fn get_total_burned(&self) -> Balance {
+            self.total_amount_burned
+        }
+
 
         #[ink(message)]
         pub fn set_day_milliseconds(
             &mut self,
-            new_day_milliseconds: Timestamp
+            new_day_milliseconds: Timestamp,
         ) -> Result<(), Error> {
             if self.env().caller() != self.admin {
                 return Err(Error::RestrictedFunction);
@@ -72,7 +77,7 @@ pub mod d9_burn_mining {
         pub fn initiate_burn(
             &mut self,
             account_id: AccountId,
-            burn_amount: Balance
+            burn_amount: Balance,
         ) -> Result<Balance, Error> {
             if self.env().caller() != self.main_pool {
                 return Err(Error::RestrictedFunction);
@@ -98,7 +103,8 @@ pub mod d9_burn_mining {
             let balance_due = amount.saturating_mul(3);
 
             // Fetch the account if it exists, or initialize a new one if it doesn't
-            let mut account = self.accounts
+            let mut account = self
+                .accounts
                 .get(&account_id)
                 .unwrap_or(Account::new(self.env().block_timestamp()));
 
@@ -119,22 +125,24 @@ pub mod d9_burn_mining {
         #[ink(message)]
         pub fn prepare_withdrawal(
             &mut self,
-            account_id: AccountId
+            account_id: AccountId,
         ) -> Result<(Balance, Timestamp), Error> {
             if self.env().caller() != self.main_pool {
                 return Err(Error::RestrictedFunction);
             }
 
-            let mut account = self.accounts.get(&account_id).ok_or(Error::NoAccountFound)?;
+            let mut account = self
+                .accounts
+                .get(&account_id)
+                .ok_or(Error::NoAccountFound)?;
 
             let base_extraction = self._calculate_base_extraction(&account);
             if base_extraction == 0 {
                 return Err(Error::WithdrawalNotAllowed);
             }
 
-            let referral_boost = self._calculate_referral_boost_reward(
-                account.referral_boost_coefficients
-            );
+            let referral_boost =
+                self._calculate_referral_boost_reward(account.referral_boost_coefficients);
 
             let total_withdrawal = base_extraction.saturating_add(referral_boost);
 
@@ -176,15 +184,15 @@ pub mod d9_burn_mining {
         pub fn update_data(
             &mut self,
             user: AccountId,
-            amount_burned: Balance
+            amount_burned: Balance,
         ) -> Result<(), Error> {
             if self.env().caller() != self.main_pool {
                 return Err(Error::RestrictedFunction);
             }
             let mut account = self.accounts.get(&user).ok_or(Error::NoAccountFound)?;
-            self.total_amount_burned = self.total_amount_burned.saturating_sub(
-                account.amount_burned
-            );
+            self.total_amount_burned = self
+                .total_amount_burned
+                .saturating_sub(account.amount_burned);
             account.amount_burned = amount_burned;
             account.balance_due = amount_burned.saturating_mul(3);
             self.accounts.insert(user, &account);
@@ -200,11 +208,12 @@ pub mod d9_burn_mining {
         pub fn set_code(&mut self, code_hash: [u8; 32]) {
             let caller = self.env().caller();
             assert!(caller == self.admin, "Only admin can set code hash.");
-            ink::env
-                ::set_code_hash(&code_hash)
-                .unwrap_or_else(|err| {
-                    panic!("Failed to `set_code_hash` to {:?} due to {:?}", code_hash, err)
-                });
+            ink::env::set_code_hash(&code_hash).unwrap_or_else(|err| {
+                panic!(
+                    "Failed to `set_code_hash` to {:?} due to {:?}",
+                    code_hash, err
+                )
+            });
             ink::env::debug_println!("Switched code hash to {:?}.", code_hash);
         }
 
@@ -221,7 +230,7 @@ pub mod d9_burn_mining {
                 .saturating_sub(last_interaction)
                 .saturating_div(self.day_milliseconds);
 
-            let daily_return_percent: Perquintill = self._get_return_percent();
+            let daily_return_percent: Perquintill = self.get_return_percent();
 
             // let daily_allowance = daily_return_percent * account.balance_due;
             let daily_allowance = daily_return_percent.mul_floor(account.amount_burned);
@@ -239,40 +248,45 @@ pub mod d9_burn_mining {
 
         fn _calculate_referral_boost_reward(
             &self,
-            referral_coefficients: (Balance, Balance)
+            referral_coefficients: (Balance, Balance),
         ) -> Balance {
-            let direct_referral_boost = Perbill::from_percent(10).mul_floor(
-                referral_coefficients.0
-            );
-            let indirect_referral_boost = Perbill::from_percent(1).mul_floor(
-                referral_coefficients.1
-            );
+            let direct_referral_boost =
+                Perbill::from_percent(10).mul_floor(referral_coefficients.0);
+            let indirect_referral_boost =
+                Perbill::from_percent(1).mul_floor(referral_coefficients.1);
 
             direct_referral_boost.saturating_add(indirect_referral_boost)
         }
         //todo what is last_burn used for
         fn _update_ancestors_coefficents(&mut self, allowance: Balance, ancestors: &[AccountId]) {
             let parent = ancestors[0];
-            let mut account = self.accounts
+            let mut account = self
+                .accounts
                 .get(&parent)
-                .unwrap_or_else(|| { Account::new(self.env().block_timestamp()) });
+                .unwrap_or_else(|| Account::new(self.env().block_timestamp()));
             // add allowance to parent's x coefficient in R_a = base_extraction_rate + x0.1 + y0.01
-            account.referral_boost_coefficients.0 =
-                account.referral_boost_coefficients.0.saturating_add(allowance);
+            account.referral_boost_coefficients.0 = account
+                .referral_boost_coefficients
+                .0
+                .saturating_add(allowance);
             self.accounts.insert(parent, &account);
 
             for ancestor in ancestors.iter().skip(1) {
-                let mut ancestor_account = self.accounts
+                let mut ancestor_account = self
+                    .accounts
                     .get(&ancestor)
-                    .unwrap_or_else(|| { Account::new(self.env().block_timestamp()) });
+                    .unwrap_or_else(|| Account::new(self.env().block_timestamp()));
                 // add allowance to ancestor's y coefficient in R_a = base_extraction_rate + x0.1 + y0.01
-                ancestor_account.referral_boost_coefficients.1 =
-                    ancestor_account.referral_boost_coefficients.1.saturating_add(allowance);
+                ancestor_account.referral_boost_coefficients.1 = ancestor_account
+                    .referral_boost_coefficients
+                    .1
+                    .saturating_add(allowance);
                 self.accounts.insert(ancestor, &ancestor_account);
             }
         }
 
-        fn _get_return_percent(&self) -> Perquintill {
+        #[ink(message)]
+        pub fn get_return_percent(&self) -> Perquintill {
             let first_threshold_amount: Balance = 200_000_000_000_000_000_000;
             // let mut percentage: f64 = 0.008;
             let percentage: Perquintill = Perquintill::from_rational(8u64, 1000u64);
@@ -280,8 +294,9 @@ pub mod d9_burn_mining {
                 return percentage;
             }
 
-            let excess_amount: u128 =
-                self.total_amount_burned.saturating_sub(first_threshold_amount);
+            let excess_amount: u128 = self
+                .total_amount_burned
+                .saturating_sub(first_threshold_amount);
             let reductions: u128 = excess_amount
                 .saturating_div(100_000_000_000_000_000_000)
                 .saturating_add(1);
@@ -295,7 +310,7 @@ pub mod d9_burn_mining {
         fn divide_perquintill_by_number(
             &self,
             perquintill_value: Perquintill,
-            divisor: u64
+            divisor: u64,
         ) -> Perquintill {
             if divisor == 0 {
                 panic!("Division by zero is not allowed");
@@ -325,7 +340,7 @@ pub mod d9_burn_mining {
             let current_block_time: Timestamp =
                 ink::env::block_timestamp::<ink::env::DefaultEnvironment>();
             let _ = ink::env::test::set_block_timestamp::<ink::env::DefaultEnvironment>(
-                current_block_time + move_forward_by
+                current_block_time + move_forward_by,
             );
             let _ = ink::env::test::advance_block::<ink::env::DefaultEnvironment>();
         }
@@ -349,14 +364,17 @@ pub mod d9_burn_mining {
             static INITIAL_TIME: Timestamp = 1672531200000;
             set_block_time(INITIAL_TIME);
             d9_burn_mining.total_amount_burned = 200_000_000_000_000_000_000;
-            let percentage = d9_burn_mining._get_return_percent();
+            let percentage = d9_burn_mining.get_return_percent();
             assert_eq!(percentage, Perbill::from_rational(8u32, 1000u32));
             d9_burn_mining.total_amount_burned = 250_000_000_000_000_000_000;
-            let smaller_percentage = d9_burn_mining._get_return_percent();
+            let smaller_percentage = d9_burn_mining.get_return_percent();
             assert_eq!(smaller_percentage, Perbill::from_rational(4u32, 1000u32));
             d9_burn_mining.total_amount_burned = 350_000_000_000_000_000_000;
-            let even_smaller_percentage = d9_burn_mining._get_return_percent();
-            assert_eq!(even_smaller_percentage, Perbill::from_rational(2u32, 1000u32));
+            let even_smaller_percentage = d9_burn_mining.get_return_percent();
+            assert_eq!(
+                even_smaller_percentage,
+                Perbill::from_rational(2u32, 1000u32)
+            );
         }
         #[ink::test]
         fn withdrawal_permitted() {
@@ -404,11 +422,13 @@ pub mod d9_burn_mining {
             move_time_forward(d9_burn_mining.day_milliseconds);
 
             let base_extraction = d9_burn_mining._calculate_base_extraction(&account);
-            let referral_boost = d9_burn_mining._calculate_referral_boost_reward(
-                account.referral_boost_coefficients
-            );
+            let referral_boost = d9_burn_mining
+                ._calculate_referral_boost_reward(account.referral_boost_coefficients);
             let total = base_extraction.saturating_add(referral_boost);
-            assert_eq!(total, 24_000000000000 + 100_000_000_000_000 + 10_000_000_000_000);
+            assert_eq!(
+                total,
+                24_000000000000 + 100_000_000_000_000 + 10_000_000_000_000
+            );
         }
     }
 }

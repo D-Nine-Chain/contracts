@@ -136,6 +136,7 @@ mod d9_merchant_mining {
         EcdsaRecoveryFailed,
         ErrorGettingEstimate,
         CrossContractCallErrorGettingEstimate,
+        ErrorAddingVotes,
     }
 
     impl From<EnvError> for Error {
@@ -193,7 +194,6 @@ mod d9_merchant_mining {
         consumer: AccountId,
         #[ink(topic)]
         amount: Balance,
-
     }
     #[ink(event)]
     pub struct USDTMerchantPaymentSent {
@@ -203,11 +203,10 @@ mod d9_merchant_mining {
         consumer: AccountId,
         #[ink(topic)]
         amount: Balance,
-
     }
 
     #[ink(event)]
-    pub struct GivePointsUSDT{
+    pub struct GivePointsUSDT {
         #[ink(topic)]
         consumer: AccountId,
         #[ink(topic)]
@@ -478,7 +477,6 @@ mod d9_merchant_mining {
                 merchant: merchant_id,
                 consumer: consumer_id,
                 amount: usdt_amount,
-               
             });
             self.finish_processing_payment(consumer_id, merchant_id, usdt_amount)
         }
@@ -505,6 +503,7 @@ mod d9_merchant_mining {
 
             //process payments
             let usdt_amount = conversion_result.unwrap();
+
             self.env().emit_event(D9MerchantPaymentSent {
                 merchant: merchant_id,
                 consumer: payer,
@@ -542,7 +541,16 @@ mod d9_merchant_mining {
                 return Err(e);
             }
             let d9_amount = conversion_result.unwrap();
-
+            let added_voting_interests: u64 = self.calc_votes_from_d9(d9_amount);
+            if added_voting_interests > 0 {
+                let adding_vote_result = self
+                    .env()
+                    .extension()
+                    .add_voting_interests(merchant_id, added_voting_interests);
+                if adding_vote_result.is_err() {
+                    return Err(Error::ErrorAddingVotes);
+                }
+            }
             //send to mining pool
             let _ = self.call_mining_pool_to_process(d9_amount)?;
 
@@ -562,6 +570,12 @@ mod d9_merchant_mining {
                 merchant: merchant_green_points,
                 consumer: consumer_green_points,
             })
+        }
+
+        fn calc_votes_from_d9(&self, amount: Balance) -> u64 {
+            let one_d9: Balance = 1_000_000_000_000;
+            let integer_d9 = amount.saturating_div(one_d9) as u64;
+            integer_d9
         }
 
         #[ink(message)]

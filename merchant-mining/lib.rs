@@ -136,7 +136,6 @@ mod d9_merchant_mining {
         EcdsaRecoveryFailed,
         ErrorGettingEstimate,
         CrossContractCallErrorGettingEstimate,
-        ErrorAddingVotes,
     }
 
     impl From<EnvError> for Error {
@@ -541,16 +540,7 @@ mod d9_merchant_mining {
                 return Err(e);
             }
             let d9_amount = conversion_result.unwrap();
-            let added_voting_interests: u64 = self.calc_votes_from_d9(d9_amount);
-            if added_voting_interests > 0 {
-                let adding_vote_result = self
-                    .env()
-                    .extension()
-                    .add_voting_interests(merchant_id, added_voting_interests);
-                if adding_vote_result.is_err() {
-                    return Err(Error::ErrorAddingVotes);
-                }
-            }
+
             //send to mining pool
             let _ = self.call_mining_pool_to_process(d9_amount)?;
 
@@ -572,11 +562,6 @@ mod d9_merchant_mining {
             })
         }
 
-        fn calc_votes_from_d9(&self, amount: Balance) -> u64 {
-            let one_d9: Balance = 1_000_000_000_000;
-            let integer_d9 = amount.saturating_div(one_d9) as u64;
-            integer_d9
-        }
 
         #[ink(message)]
         pub fn get_expiry(&self, account_id: AccountId) -> Result<Timestamp, Error> {

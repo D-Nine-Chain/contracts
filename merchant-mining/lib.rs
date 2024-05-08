@@ -29,7 +29,7 @@ mod d9_merchant_mining {
         // processed_d9: Balance,
     }
 
-    #[derive(Decode, Encode)]
+    #[derive(Decode, Encode, Clone)]
     #[cfg_attr(
         feature = "std",
         derive(
@@ -313,41 +313,48 @@ mod d9_merchant_mining {
             if maybe_account.is_none() {
                 return Err(Error::NoAccountFound);
             }
-            let mut account = maybe_account.unwrap();
+            let account = maybe_account.unwrap();
             if account.green_points == 0 {
                 return Err(Error::NothingToRedeem);
             }
-            //calculate green => red points conversion
-            let last_redeem_timestamp = account.last_conversion.unwrap_or(account.created_at);
-
-            let time_based_red_points =
-                self.calculate_red_points_from_time(account.green_points, last_redeem_timestamp);
-
-            if time_based_red_points == 0 {
+            let redeemable_red_points = self.calc_total_redeemable_red_points(&account);
+            if redeemable_red_points == 0 {
                 return Err(Error::NothingToRedeem);
             }
+            let disburse_result = self.disburse_d9(caller, account, redeemable_red_points);
+            return disburse_result;
+        }
 
+        /// total redeemable red points will never be more than account's remaining green points
+        fn calc_total_redeemable_red_points(&self, account: &Account) -> Balance {
+            let last_redeem_timestamp = account.last_conversion.unwrap_or(account.created_at);
+            let time_based_red_points =
+                self.calc_red_points_from_time(account.green_points, last_redeem_timestamp);
             let relationship_based_red_points =
-                self.calculate_red_points_from_relationships(account.relationship_factors);
-
+                self.calc_red_points_from_relationships(account.relationship_factors);
             let total_red_points =
                 time_based_red_points.saturating_add(relationship_based_red_points);
-            if total_red_points == 0 {
-                return Err(Error::NothingToRedeem);
-            }
-            let convertible_red_points = {
+            let redeemable_red_points = {
                 if total_red_points > account.green_points {
                     account.green_points
                 } else {
                     total_red_points
                 }
             };
-            // deduct red points from green points
-            account.green_points = account.green_points.saturating_sub(convertible_red_points);
+            redeemable_red_points
+        }
+
+        fn disburse_d9(
+            &mut self,
+            recipient_id: AccountId,
+            mut account: Account,
+            redeemable_red_points: Balance,
+        ) -> Result<Balance, Error> {
+            account.green_points = account.green_points.saturating_sub(redeemable_red_points);
 
             //calculated red points => d9 conversion
-            let redeemable_usdt = convertible_red_points.saturating_div(100);
-            let redeem_result = self.mining_pool_redeem(caller, redeemable_usdt);
+            let redeemable_usdt = redeemable_red_points.saturating_div(100);
+            let redeem_result = self.mining_pool_redeem(recipient_id, redeemable_usdt);
             if redeem_result.is_err() {
                 return Err(Error::RedeemD9TransferFailed);
             }
@@ -357,14 +364,18 @@ mod d9_merchant_mining {
             account.last_conversion = Some(self.env().block_timestamp());
             account.relationship_factors = (0, 0);
 
-            self.accounts.insert(caller, &account);
+            self.accounts.insert(recipient_id, &account);
             //attempt to pay ancestors
-            if let Some(ancestors) = self.get_ancestors(caller) {
+            //calculate green => red points conversion
+            let last_redeem_timestamp = account.last_conversion.unwrap_or(account.created_at);
+            let time_based_red_points =
+                self.calc_red_points_from_time(account.green_points, last_redeem_timestamp);
+            if let Some(ancestors) = self.get_ancestors(recipient_id) {
                 let _ = self.update_ancestors_coefficients(&ancestors, time_based_red_points);
             }
 
             self.env().emit_event(D9Redeemed {
-                account_id: caller,
+                account_id: recipient_id,
                 redeemed_d9: d9_amount,
             });
 
@@ -399,9 +410,13 @@ mod d9_merchant_mining {
             let d9_amount = self.env().transferred_value();
             let usdt_amount = self.estimate_usdt(d9_amount)?;
             // Convert to USDT and delegate to give_green_points_internal
-            let green_points_result = self.give_green_points_internal(consumer_id, usdt_amount);
-            self.call_mining_pool_to_process(d9_amount)?;
-            Ok(green_points_result)
+            let green_points_result_result =
+                self.give_green_points_internal(consumer_id, usdt_amount);
+            if let Err(e) = green_points_result_result {
+                return Err(e);
+            }
+            self.call_mining_pool_to_process(merchant_id, d9_amount)?;
+            green_points_result_result
         }
 
         #[ink(message)]
@@ -416,22 +431,27 @@ mod d9_merchant_mining {
             self.receive_usdt_from_user(merchant_id, usdt_payment)?;
 
             // Delegate to give_green_points_internal
-            let green_points_result = self.give_green_points_internal(consumer_id, usdt_payment);
+            let green_points_result_result =
+                self.give_green_points_internal(consumer_id, usdt_payment);
+            if let Err(e) = green_points_result_result {
+                self.contract_sends_usdt_to(merchant_id, usdt_payment)?;
+                return Err(e);
+            }
             let d9_amount = self.convert_to_d9(usdt_payment)?;
-            self.call_mining_pool_to_process(d9_amount)?;
+            self.call_mining_pool_to_process(merchant_id, d9_amount)?;
             self.env().emit_event(GivePointsUSDT {
                 consumer: consumer_id,
                 merchant: merchant_id,
                 amount: usdt_payment,
             });
-            Ok(green_points_result)
+            Ok(green_points_result_result.unwrap())
         }
 
         fn give_green_points_internal(
             &mut self,
             consumer_id: AccountId,
             amount: Balance,
-        ) -> GreenPointsResult {
+        ) -> Result<GreenPointsResult, Error> {
             // Calculate green points
             let usdt_amount_to_green = amount.saturating_mul(100).saturating_div(16);
             let consumer_green_points = self.calculate_green_points(usdt_amount_to_green);
@@ -439,11 +459,16 @@ mod d9_merchant_mining {
                 Perbill::from_rational(16u32, 100u32).mul_floor(consumer_green_points);
 
             // Update accounts
-            self.add_green_points(consumer_id, consumer_green_points);
-            self.add_green_points(self.env().caller(), merchant_green_points);
-
-            // Convert to D9, send to mining pool, and credit pool
-
+            let add_consumer_points_result =
+                self.add_green_points(consumer_id, consumer_green_points);
+            if let Err(e) = add_consumer_points_result {
+                return Err(e);
+            }
+            let add_merchant_points_result =
+                self.add_green_points(self.env().caller(), merchant_green_points);
+            if let Err(e) = add_merchant_points_result {
+                return Err(e);
+            }
             // Emit event
             self.env().emit_event(GreenPointsTransaction {
                 merchant: GreenPointsCreated {
@@ -456,10 +481,10 @@ mod d9_merchant_mining {
                 },
             });
 
-            GreenPointsResult {
+            Ok(GreenPointsResult {
                 merchant: merchant_green_points,
                 consumer: consumer_green_points,
-            }
+            })
         }
 
         #[ink(message, payable)]
@@ -531,8 +556,16 @@ mod d9_merchant_mining {
             let merchant_green_points = self.calculate_green_points(merchant_usdt_to_green);
             let consumer_green_points = self.calculate_green_points(usdt_amount);
             //update accounts
-            self.add_green_points(merchant_id, merchant_green_points);
-            self.add_green_points(consumer_id, consumer_green_points);
+            let add_merchant_points_result =
+                self.add_green_points(merchant_id, merchant_green_points);
+            if let Err(e) = add_merchant_points_result {
+                return Err(e);
+            }
+            let add_consumer_points_result =
+                self.add_green_points(consumer_id, consumer_green_points);
+            if let Err(e) = add_consumer_points_result {
+                return Err(e);
+            }
 
             // convert usdt to d9
             let conversion_result = self.convert_to_d9(merchant_usdt_to_green);
@@ -542,7 +575,7 @@ mod d9_merchant_mining {
             let d9_amount = conversion_result.unwrap();
 
             //send to mining pool
-            let _ = self.call_mining_pool_to_process(d9_amount)?;
+            let _ = self.call_mining_pool_to_process(merchant_id, d9_amount)?;
 
             // self.credit_pool(d9_amount);
             self.env().emit_event(GreenPointsTransaction {
@@ -561,7 +594,6 @@ mod d9_merchant_mining {
                 consumer: consumer_green_points,
             })
         }
-
 
         #[ink(message)]
         pub fn get_expiry(&self, account_id: AccountId) -> Result<Timestamp, Error> {
@@ -820,7 +852,7 @@ mod d9_merchant_mining {
         /// base rate calculation is based on time.acceleration is based on ancestors
         ///
         /// 1 red point = 1 green point
-        fn calculate_red_points_from_time(
+        fn calc_red_points_from_time(
             &self,
             green_points: Balance,
             last_redeem_timestamp: Timestamp,
@@ -844,7 +876,7 @@ mod d9_merchant_mining {
         /// acceleration rate calculation is based on ancestors
         ///
         /// 10% for parent, 1% for each ancestor
-        fn calculate_red_points_from_relationships(
+        fn calc_red_points_from_relationships(
             &self,
             // red_points: Balance,
             referral_coefficients: (Balance, Balance),
@@ -856,14 +888,21 @@ mod d9_merchant_mining {
         }
 
         /// send some amount to the mining pool
-        fn call_mining_pool_to_process(&self, amount: Balance) -> Result<(), Error> {
+        fn call_mining_pool_to_process(
+            &self,
+            merchant_id: AccountId,
+            amount: Balance,
+        ) -> Result<(), Error> {
             let _ = build_call::<D9Environment>()
                 .call(self.mining_pool)
                 .gas_limit(0) // replace with an appropriate gas limit
                 .transferred_value(amount)
-                .exec_input(ExecutionInput::new(Selector::new(ink::selector_bytes!(
-                    "process_merchant_payment"
-                ))))
+                .exec_input(
+                    ExecutionInput::new(Selector::new(ink::selector_bytes!(
+                        "process_merchant_payment"
+                    )))
+                    .push_arg(merchant_id),
+                )
                 .returns::<Result<(), Error>>()
                 .try_invoke()?;
             Ok(())
@@ -877,13 +916,24 @@ mod d9_merchant_mining {
             }
         }
 
-        fn add_green_points(&mut self, account_id: AccountId, amount: Balance) {
+        fn add_green_points(
+            &mut self,
+            account_id: AccountId,
+            amount: Balance,
+        ) -> Result<(), Error> {
             let mut account = self
                 .accounts
                 .get(&account_id)
                 .unwrap_or(Account::new(self.env().block_timestamp()));
+            let redeemable_red_points = self.calc_total_redeemable_red_points(&account);
+            let disburse_result =
+                self.disburse_d9(account_id, account.clone(), redeemable_red_points);
+            if let Err(e) = disburse_result {
+                return Err(e);
+            }
             account.green_points = account.green_points.saturating_add(amount);
             self.accounts.insert(account_id, &account);
+            Ok(())
         }
 
         fn update_ancestors_coefficients(

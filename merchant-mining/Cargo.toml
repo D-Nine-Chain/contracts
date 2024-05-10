@@ -1,6 +1,6 @@
 [package]
 name = "d9-merchant-mining"
-version = "0.1.0"
+version = "0.2.0"
 authors = ["D9Dev"]
 edition = "2021"
 
@@ -11,29 +11,29 @@ edition = "2021"
 
 [dependencies]
 ink = { version = "4.3.0", default-features = false }
-d9-chain-extension = { version = "0.1.0", path = "../chain-extension", default-features = false }
+d9-chain-extension = { version = "0.2.0", path = "../chain-extension", default-features = false }
 scale = { package = "parity-scale-codec", version = "3", default-features = false, features = [
-   "derive",
+    "derive",
 ] }
 sp-arithmetic = { version = "19", default-features = false }
 scale-info = { version = "2.10.0", default-features = false, features = [
-   "derive",
+    "derive",
 ], optional = true }
 substrate-fixed = { default-features = false, git = "https://github.com/encointer/substrate-fixed" }
 [dev-dependencies]
 ink_e2e = "4.2.0"
-mining_pool = { version = "0.1.0", path = "../mining-pool", default-features = false }
+mining_pool = { version = "0.2.0", path = "../mining-pool", default-features = false }
 [lib]
 path = "lib.rs"
 
 [features]
 default = ["std"]
 std = [
-   "ink/std",
-   "scale/std",
-   "scale-info/std",
-   "d9-chain-extension/std",
-   "substrate-fixed/std",
+    "ink/std",
+    "scale/std",
+    "scale-info/std",
+    "d9-chain-extension/std",
+    "substrate-fixed/std",
 ]
 ink-as-dependency = []
 e2e-tests = []

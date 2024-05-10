@@ -1,8 +1,8 @@
 {
   "source": {
-    "hash": "0xd550e1dc1c7cbcca632ab803389b738bd5412bef54cf7c3acc1fc369b8b775dc",
+    "hash": "0x5b85236e2bb343d14fa4ba4d43290d44b4744a208d31d5ce97562cdf4180670e",
     "language": "ink! 4.3.0",
-    "compiler": "rustc 1.72.0",
+    "compiler": "rustc 1.76.0",
     "build_info": {
       "build_mode": "Release",
       "cargo_contract_version": "3.2.0",
@@ -288,7 +288,17 @@
         "selector": "0xe88330b2"
       },
       {
-        "args": [],
+        "args": [
+          {
+            "label": "merchant_id",
+            "type": {
+              "displayName": [
+                "AccountId"
+              ],
+              "type": 0
+            }
+          }
+        ],
         "default": false,
         "docs": [],
         "label": "process_merchant_payment",
@@ -879,6 +889,10 @@
               {
                 "index": 3,
                 "name": "SessionPoolNotReady"
+              },
+              {
+                "index": 4,
+                "name": "ErrorAddingVotes"
               }
             ]
           }

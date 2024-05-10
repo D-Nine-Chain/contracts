@@ -34,3 +34,9 @@ make sure to use:
 `cargo contract build`
 
 to build all contracts.
+
+## secrets using vlt
+
+`vlt run -- env | grep D9_CONTRACT_WORKER
+
+0x75fca36af004fc6239e7b63b2fcaeb1fb63ec7de025ca0e9112a0ecab2fb0354

@@ -1,6 +1,6 @@
 {
   "source": {
-    "hash": "0x1605acf16a5d67473a30bde3624e103393a3ffaf9310f3abfcdb6ef1d1370ee4",
+    "hash": "0xda861a90b354114aab286ade0f547ca272f694a6d3b4377ae04983b45152b738",
     "language": "ink! 4.3.0",
     "compiler": "rustc 1.76.0",
     "build_info": {
@@ -15,7 +15,7 @@
   },
   "contract": {
     "name": "d9-merchant-mining",
-    "version": "0.1.0",
+    "version": "0.2.0",
     "authors": [
       "D9Dev"
     ]
@@ -86,19 +86,19 @@
         "displayName": [
           "BlockNumber"
         ],
-        "type": 25
+        "type": 26
       },
       "chainExtension": {
         "displayName": [
           "ChainExtension"
         ],
-        "type": 26
+        "type": 27
       },
       "hash": {
         "displayName": [
           "Hash"
         ],
-        "type": 24
+        "type": 25
       },
       "maxEventTopics": 4,
       "timestamp": {
@@ -186,7 +186,7 @@
               "displayName": [
                 "GreenPointsCreated"
               ],
-              "type": 23
+              "type": 24
             }
           },
           {
@@ -197,7 +197,7 @@
               "displayName": [
                 "GreenPointsCreated"
               ],
-              "type": 23
+              "type": 24
             }
           }
         ],
@@ -308,7 +308,7 @@
           },
           {
             "docs": [],
-            "indexed": true,
+            "indexed": false,
             "label": "amount",
             "type": {
               "displayName": [
@@ -605,6 +605,22 @@
           "type": 21
         },
         "selector": "0xafda72a6"
+      },
+      {
+        "args": [],
+        "default": false,
+        "docs": [],
+        "label": "get_mining_pool",
+        "mutates": false,
+        "payable": false,
+        "returnType": {
+          "displayName": [
+            "ink",
+            "MessageResult"
+          ],
+          "type": 23
+        },
+        "selector": "0xfc963ede"
       },
       {
         "args": [
@@ -1683,6 +1699,48 @@
       "id": 23,
       "type": {
         "def": {
+          "variant": {
+            "variants": [
+              {
+                "fields": [
+                  {
+                    "type": 2
+                  }
+                ],
+                "index": 0,
+                "name": "Ok"
+              },
+              {
+                "fields": [
+                  {
+                    "type": 7
+                  }
+                ],
+                "index": 1,
+                "name": "Err"
+              }
+            ]
+          }
+        },
+        "params": [
+          {
+            "name": "T",
+            "type": 2
+          },
+          {
+            "name": "E",
+            "type": 7
+          }
+        ],
+        "path": [
+          "Result"
+        ]
+      }
+    },
+    {
+      "id": 24,
+      "type": {
+        "def": {
           "composite": {
             "fields": [
               {
@@ -1706,7 +1764,7 @@
       }
     },
     {
-      "id": 24,
+      "id": 25,
       "type": {
         "def": {
           "composite": {
@@ -1726,7 +1784,7 @@
       }
     },
     {
-      "id": 25,
+      "id": 26,
       "type": {
         "def": {
           "primitive": "u32"
@@ -1734,7 +1792,7 @@
       }
     },
     {
-      "id": 26,
+      "id": 27,
       "type": {
         "def": {
           "variant": {}

@@ -30,6 +30,7 @@ mod mining_pool {
         FailedToGetExchangeAmount,
         FailedToTransferD9ToUser,
         SessionPoolNotReady,
+        ErrorAddingVotes
     }
 
     #[ink(storage)]
@@ -152,11 +153,24 @@ mod mining_pool {
         }
 
         #[ink(message, payable)]
-        pub fn process_merchant_payment(&mut self) -> Result<(), Error> {
+        pub fn process_merchant_payment(&mut self, merchant_id:AccountId) -> Result<(), Error> {
             let _ = self.only_callable_by(self.merchant_contract)?;
             let received_amount = self.env().transferred_value();
             self.merchant_volume = self.merchant_volume.saturating_add(received_amount);
+            
+            // give merchant votes
+            let votes = self.calc_votes_from_d9(received_amount);
+            let add_vote_result = self.env().extension().add_voting_interests(merchant_id, votes);
+            if add_vote_result.is_err() {
+                return Err(Error::ErrorAddingVotes);
+            }
             Ok(())
+        }
+
+        fn calc_votes_from_d9(&self, d9_amount:Balance)->u64{
+            let one_d9:Balance = 1_000_000_000_000;
+            let votes = d9_amount.saturating_div(one_d9);
+            votes as u64
         }
 
         #[ink(message)]

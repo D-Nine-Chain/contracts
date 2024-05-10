@@ -55,7 +55,7 @@ pub mod d9_usdt {
             value: u128,
             _data: Vec<u8>,
         ) -> Result<(), PSP22Error> {
-          psp22::Internal::_transfer_from_to(self, self.env().caller(), to, value, _data)?; // Update!
+            psp22::Internal::_transfer_from_to(self, self.env().caller(), to, value, _data)?; // Update!
             self.env().emit_event(Transfer {
                 from: Some(self.env().caller()),
                 to: Some(to),
@@ -65,8 +65,14 @@ pub mod d9_usdt {
         }
 
         #[ink(message)]
-        pub fn transfer_from(&mut self,from:AccountId, to:AccountId, value:Balance, _data:Vec<u8>) -> Result<(), PSP22Error> {
-            let allowance = psp22::Internal::_allowance(self, &from, &self.env().caller());
+        pub fn transfer_from(
+            &mut self,
+            from: AccountId,
+            to: AccountId,
+            value: Balance,
+            _data: Vec<u8>,
+        ) -> Result<(), PSP22Error> {
+            let allowance = psp22::Internal::_allowance(self, &from, &to);
             if allowance < value {
                 return Err(PSP22Error::InsufficientAllowance);
             }

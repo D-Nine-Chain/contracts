@@ -313,7 +313,7 @@ mod d9_merchant_mining {
             if maybe_account.is_none() {
                 return Err(Error::NoAccountFound);
             }
-            let account = maybe_account.unwrap();
+            let mut account = maybe_account.unwrap();
             if account.green_points == 0 {
                 return Err(Error::NothingToRedeem);
             }
@@ -321,7 +321,8 @@ mod d9_merchant_mining {
             if redeemable_red_points == 0 {
                 return Err(Error::NothingToRedeem);
             }
-            let disburse_result = self.disburse_d9(caller, account, redeemable_red_points);
+            let disburse_result = self.disburse_d9(caller, &mut account, redeemable_red_points);
+            self.accounts.insert(caller, &account);
             return disburse_result;
         }
 
@@ -347,7 +348,7 @@ mod d9_merchant_mining {
         fn disburse_d9(
             &mut self,
             recipient_id: AccountId,
-            mut account: Account,
+            account: &mut Account,
             redeemable_red_points: Balance,
         ) -> Result<Balance, Error> {
             account.green_points = account.green_points.saturating_sub(redeemable_red_points);
@@ -364,7 +365,6 @@ mod d9_merchant_mining {
             account.last_conversion = Some(self.env().block_timestamp());
             account.relationship_factors = (0, 0);
 
-            self.accounts.insert(recipient_id, &account);
             //attempt to pay ancestors
             //calculate green => red points conversion
             let last_redeem_timestamp = account.last_conversion.unwrap_or(account.created_at);
@@ -622,6 +622,11 @@ mod d9_merchant_mining {
             self.only_admin()?;
             self.mining_pool = new_mining_pool;
             Ok(())
+        }
+
+        #[ink(message)]
+        pub fn get_mining_pool(&self) -> AccountId {
+            self.mining_pool
         }
 
         /// Modifies the code which is used to execute calls to this contract address (`AccountId`).
@@ -926,16 +931,19 @@ mod d9_merchant_mining {
                 .get(&account_id)
                 .unwrap_or(Account::new(self.env().block_timestamp()));
             let redeemable_red_points = self.calc_total_redeemable_red_points(&account);
-            let disburse_result =
-                self.disburse_d9(account_id, account.clone(), redeemable_red_points);
-            if let Err(e) = disburse_result {
-                return Err(e);
+            if redeemable_red_points > 0 {
+                let disburse_result =
+                    self.disburse_d9(account_id, &mut account, redeemable_red_points);
+                if let Err(e) = disburse_result {
+                    return Err(e);
+                }
             }
             account.green_points = account.green_points.saturating_add(amount);
             self.accounts.insert(account_id, &account);
             Ok(())
         }
 
+        /// update referral coefficients for predecessor accounts
         fn update_ancestors_coefficients(
             &mut self,
             ancestors: &[AccountId],

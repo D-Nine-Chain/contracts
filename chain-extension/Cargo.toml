@@ -1,6 +1,6 @@
 [package]
 name = "d9-chain-extension"
-version = "0.1.0"
+version = "0.2.0"
 authors = ["D9Devs"]
 edition = "2021"
 
@@ -8,10 +8,10 @@ edition = "2021"
 ink = { version = "4.3.0", default-features = false }
 ink_env = { version = "4.3.0", default-features = false }
 scale = { package = "parity-scale-codec", version = "3.6.5", default-features = false, features = [
-   "derive",
+    "derive",
 ] }
 scale-info = { version = "2.10.0", default-features = false, features = [
-   'derive',
+    'derive',
 ] }
 sp-arithmetic = { version = "19", default-features = false }
 # sp-staking = { version = "4.0.0-dev", default-features = false, git = "https://github.com/paritytech/substrate.git", branch = "polkadot-v0.9.42" }
@@ -21,11 +21,11 @@ path = "lib.rs"
 [features]
 default = ["std"]
 std = [
-   "ink/std",
-   "scale/std",
-   "scale-info/std",
-   "ink_env/std",
-   "sp-arithmetic/std",
+    "ink/std",
+    "scale/std",
+    "scale-info/std",
+    "ink_env/std",
+    "sp-arithmetic/std",
 ]
 # "sp-staking/std",
 ink-as-dependency = []

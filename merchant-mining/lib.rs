@@ -362,7 +362,7 @@ mod d9_merchant_mining {
             let d9_amount = redeem_result.unwrap();
             //update account
             account.redeemed_d9 = account.redeemed_d9.saturating_add(d9_amount);
-            account.last_conversion = Some(self.env().block_timestamp());
+          
             account.relationship_factors = (0, 0);
 
             //attempt to pay ancestors
@@ -373,7 +373,8 @@ mod d9_merchant_mining {
             if let Some(ancestors) = self.get_ancestors(recipient_id) {
                 let _ = self.update_ancestors_coefficients(&ancestors, time_based_red_points);
             }
-
+            
+            account.last_conversion = Some(self.env().block_timestamp());
             self.env().emit_event(D9Redeemed {
                 account_id: recipient_id,
                 redeemed_d9: d9_amount,

@@ -351,9 +351,6 @@ mod d9_merchant_mining {
             account: &mut Account,
             redeemable_red_points: Balance,
         ) -> Result<Balance, Error> {
-
-       
-
             //calculated red points => d9 conversion
             let redeemable_usdt = redeemable_red_points.saturating_div(100);
             let redeem_result = self.mining_pool_redeem(recipient_id, redeemable_usdt);
@@ -363,7 +360,7 @@ mod d9_merchant_mining {
             let d9_amount = redeem_result.unwrap();
             //update account
             account.redeemed_d9 = account.redeemed_d9.saturating_add(d9_amount);
-          
+
             account.relationship_factors = (0, 0);
 
             //attempt to pay ancestors
@@ -374,10 +371,10 @@ mod d9_merchant_mining {
             if let Some(ancestors) = self.get_ancestors(recipient_id) {
                 let _ = self.update_ancestors_coefficients(&ancestors, time_based_red_points);
             }
-            
+
             account.last_conversion = Some(self.env().block_timestamp());
             account.green_points = account.green_points.saturating_sub(redeemable_red_points);
-            
+
             self.env().emit_event(D9Redeemed {
                 account_id: recipient_id,
                 redeemed_d9: d9_amount,
@@ -464,12 +461,12 @@ mod d9_merchant_mining {
 
             // Update accounts
             let add_consumer_points_result =
-                self.add_green_points(consumer_id, consumer_green_points);
+                self.add_green_points(consumer_id, consumer_green_points, true);
             if let Err(e) = add_consumer_points_result {
                 return Err(e);
             }
             let add_merchant_points_result =
-                self.add_green_points(self.env().caller(), merchant_green_points);
+                self.add_green_points(self.env().caller(), merchant_green_points, false);
             if let Err(e) = add_merchant_points_result {
                 return Err(e);
             }
@@ -561,12 +558,12 @@ mod d9_merchant_mining {
             let consumer_green_points = self.calculate_green_points(usdt_amount);
             //update accounts
             let add_merchant_points_result =
-                self.add_green_points(merchant_id, merchant_green_points);
+                self.add_green_points(merchant_id, merchant_green_points, false);
             if let Err(e) = add_merchant_points_result {
                 return Err(e);
             }
             let add_consumer_points_result =
-                self.add_green_points(consumer_id, consumer_green_points);
+                self.add_green_points(consumer_id, consumer_green_points, true);
             if let Err(e) = add_consumer_points_result {
                 return Err(e);
             }
@@ -929,17 +926,20 @@ mod d9_merchant_mining {
             &mut self,
             account_id: AccountId,
             amount: Balance,
+            predisburse_d9: bool,
         ) -> Result<(), Error> {
             let mut account = self
                 .accounts
                 .get(&account_id)
                 .unwrap_or(Account::new(self.env().block_timestamp()));
-            let redeemable_red_points = self.calc_total_redeemable_red_points(&account);
-            if redeemable_red_points > 0 {
-                let disburse_result =
-                    self.disburse_d9(account_id, &mut account, redeemable_red_points);
-                if let Err(e) = disburse_result {
-                    return Err(e);
+            if predisburse_d9 {
+                let redeemable_red_points = self.calc_total_redeemable_red_points(&account);
+                if redeemable_red_points > 0 {
+                    let disburse_result =
+                        self.disburse_d9(account_id, &mut account, redeemable_red_points);
+                    if let Err(e) = disburse_result {
+                        return Err(e);
+                    }
                 }
             }
             account.green_points = account.green_points.saturating_add(amount);

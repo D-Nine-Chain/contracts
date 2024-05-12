@@ -1,6 +1,6 @@
 [package]
 name = "d9-merchant-mining"
-version = "0.2.0"
+version = "0.2.1"
 authors = ["D9Dev"]
 edition = "2021"
 

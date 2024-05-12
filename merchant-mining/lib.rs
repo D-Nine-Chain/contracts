@@ -351,7 +351,8 @@ mod d9_merchant_mining {
             account: &mut Account,
             redeemable_red_points: Balance,
         ) -> Result<Balance, Error> {
-            account.green_points = account.green_points.saturating_sub(redeemable_red_points);
+
+       
 
             //calculated red points => d9 conversion
             let redeemable_usdt = redeemable_red_points.saturating_div(100);
@@ -375,6 +376,8 @@ mod d9_merchant_mining {
             }
             
             account.last_conversion = Some(self.env().block_timestamp());
+            account.green_points = account.green_points.saturating_sub(redeemable_red_points);
+            
             self.env().emit_event(D9Redeemed {
                 account_id: recipient_id,
                 redeemed_d9: d9_amount,

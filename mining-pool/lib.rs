@@ -139,10 +139,18 @@ mod mining_pool {
             session_index: u32,
             current_volume: Balance
         ) -> Result<Balance, Error> {
-            let previous_index = session_index.saturating_sub(1);
+            let previous_index = self.get_previous_valid_session_index(session_index);
             let previous_volume = self.volume_at_index.get(&previous_index).unwrap_or(0);
             let session_delta = current_volume.saturating_sub(previous_volume);
             Ok(session_delta)
+        }
+
+        fn get_previous_valid_session_index(&self, last_session: u32) -> u32 {
+            let mut previous_index = last_session.saturating_sub(1);
+            while previous_index > 0 && self.volume_at_index.get(&previous_index).is_none() {
+                previous_index = previous_index.saturating_sub(1);
+            }
+            previous_index
         }
 
         #[ink(message)]

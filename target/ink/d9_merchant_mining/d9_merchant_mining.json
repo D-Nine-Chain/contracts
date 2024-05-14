@@ -1,6 +1,6 @@
 {
   "source": {
-    "hash": "0xda861a90b354114aab286ade0f547ca272f694a6d3b4377ae04983b45152b738",
+    "hash": "0xb478c961f1eedbf60fcb1770a2657bc3939456551c1192880a505c379749e9e3",
     "language": "ink! 4.3.0",
     "compiler": "rustc 1.76.0",
     "build_info": {
@@ -15,7 +15,7 @@
   },
   "contract": {
     "name": "d9-merchant-mining",
-    "version": "0.2.0",
+    "version": "0.2.1",
     "authors": [
       "D9Dev"
     ]

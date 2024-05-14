@@ -1,12 +1,12 @@
 [package]
 name = "market-maker"
-version = "0.1.0"
+version = "1.0.0"
 authors = ["D9Dev"]
 edition = "2021"
 
 [dependencies]
 ink = { version = "4.3.0", default-features = false }
-d9-chain-extension = { version = "0.2.0", path = "../chain-extension", default-features = false }
+d9-chain-extension = { version = "^1.0.0", path = "../chain-extension", default-features = false }
 scale = { package = "parity-scale-codec", version = "3", default-features = false, features = [
     "derive",
 ] }
@@ -19,7 +19,7 @@ substrate-fixed = { default-features = false, git = "https://github.com/encointe
 
 [dev-dependencies]
 ink_e2e = "4.2.0"
-d9_usdt = { version = "0.1.0", path = "../tokens/usdt", default-features = false }
+d9_usdt = { version = "^1.0.0", path = "../tokens/usdt", default-features = false }
 [lib]
 path = "lib.rs"
 

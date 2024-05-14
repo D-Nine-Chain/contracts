@@ -1,8 +1,8 @@
 {
   "source": {
-    "hash": "0xa80935f14217dc34190e6b5b6e013ca7f60c446fb2d279733f0677f016f52861",
+    "hash": "0x049411e2736bb853d6fca73db41282ada104b409bc78926e061d164e38204479",
     "language": "ink! 4.3.0",
-    "compiler": "rustc 1.72.0",
+    "compiler": "rustc 1.76.0",
     "build_info": {
       "build_mode": "Release",
       "cargo_contract_version": "3.2.0",
@@ -15,9 +15,9 @@
   },
   "contract": {
     "name": "node_reward",
-    "version": "0.1.0",
+    "version": "1.0.0",
     "authors": [
-      "[your_name] <[your_email]>"
+      "D9 Network tech@d9network.com"
     ]
   },
   "spec": {
@@ -138,6 +138,45 @@
         ],
         "docs": [],
         "label": "NodeRewardPaid"
+      },
+      {
+        "args": [
+          {
+            "docs": [],
+            "indexed": true,
+            "label": "session_index",
+            "type": {
+              "displayName": [
+                "u32"
+              ],
+              "type": 12
+            }
+          },
+          {
+            "docs": [],
+            "indexed": false,
+            "label": "reward_pool",
+            "type": {
+              "displayName": [
+                "Balance"
+              ],
+              "type": 3
+            }
+          },
+          {
+            "docs": [],
+            "indexed": false,
+            "label": "total_paid_out",
+            "type": {
+              "displayName": [
+                "Balance"
+              ],
+              "type": 3
+            }
+          }
+        ],
+        "docs": [],
+        "label": "SessionRewardsIssued"
       }
     ],
     "lang_error": {

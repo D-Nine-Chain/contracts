@@ -11,7 +11,7 @@ edition = "2021"
 
 [dependencies]
 ink = { version = "4.3.0", default-features = false }
-d9-chain-extension = { version = "0.2.0", path = "../chain-extension", default-features = false }
+d9-chain-extension = { version = "^1.0.0", path = "../chain-extension", default-features = false }
 scale = { package = "parity-scale-codec", version = "3", default-features = false, features = [
     "derive",
 ] }
@@ -22,7 +22,7 @@ scale-info = { version = "2.10.0", default-features = false, features = [
 substrate-fixed = { default-features = false, git = "https://github.com/encointer/substrate-fixed" }
 [dev-dependencies]
 ink_e2e = "4.2.0"
-mining_pool = { version = "0.2.0", path = "../mining-pool", default-features = false }
+mining_pool = { version = "^1.0.0", path = "../mining-pool", default-features = false }
 [lib]
 path = "lib.rs"
 

@@ -1,6 +1,6 @@
 [package]
 name = "d9-chain-extension"
-version = "0.2.0"
+version = "1.0.0"
 authors = ["D9Devs"]
 edition = "2021"
 

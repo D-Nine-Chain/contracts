@@ -1,6 +1,6 @@
 {
   "source": {
-    "hash": "0x5b85236e2bb343d14fa4ba4d43290d44b4744a208d31d5ce97562cdf4180670e",
+    "hash": "0x51db8128f6fdf52ba90763e498a9b03b60c3a026b681dcba5657e0ee3f900e52",
     "language": "ink! 4.3.0",
     "compiler": "rustc 1.76.0",
     "build_info": {
@@ -15,7 +15,7 @@
   },
   "contract": {
     "name": "mining_pool",
-    "version": "0.1.0",
+    "version": "0.2.0",
     "authors": [
       "D9"
     ]

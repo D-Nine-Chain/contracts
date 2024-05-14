@@ -1,11 +1,11 @@
 [package]
 name = "mining_pool"
-version = "0.2.0"
+version = "1.0.0"
 authors = ["D9"]
 edition = "2021"
 
 [dependencies]
-d9-chain-extension = { version = "0.2.0", path = "../chain-extension", default-features = false }
+d9-chain-extension = { version = "^1.0.0", path = "../chain-extension", default-features = false }
 ink = { version = "4.3.0", default-features = false }
 sp-arithmetic = { version = "19", default-features = false }
 scale = { package = "parity-scale-codec", version = "3.6.5", default-features = false, features = [

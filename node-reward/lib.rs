@@ -63,6 +63,14 @@ mod node_reward {
         amount: Balance,
     }
 
+    #[ink(event)]
+    pub struct SessionRewardsIssued{
+        #[ink(topic)]
+        session_index: u32,
+        reward_pool: Balance,
+        total_paid_out: Balance, 
+    }
+
     impl NodeReward {
         /// Constructor that initializes the `bool` value to the given `init_value`.
         #[ink(constructor)]
@@ -85,6 +93,7 @@ mod node_reward {
             }
             Ok(())
         }
+        
 
         #[ink(message)]
         pub fn set_mining_pool(&mut self, mining_pool: AccountId) -> Result<(), Error> {
@@ -222,6 +231,11 @@ mod node_reward {
                 }
             }
             self.session_rewards.insert(last_session, &(reward_pool, total_paid_out));
+            self.env().emit_event(SessionRewardsIssued {
+                session_index: last_session,
+                reward_pool,
+                total_paid_out,
+            });
             Ok(())
         }
 

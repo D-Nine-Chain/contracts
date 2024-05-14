@@ -1,12 +1,12 @@
 [package]
 name = "node_reward"
-version = "0.1.0"
-authors = ["[your_name] <[your_email]>"]
+version = "1.0.0"
+authors = ["D9 Network tech@d9network.com"]
 edition = "2021"
 
 [dependencies]
 ink = { version = "4.2.0", default-features = false }
-d9-chain-extension = { version = "0.2.0", path = "../chain-extension", default-features = false }
+d9-chain-extension = { version = "^1.0.0", path = "../chain-extension", default-features = false }
 scale = { package = "parity-scale-codec", version = "3", default-features = false, features = [
     "derive",
 ] }

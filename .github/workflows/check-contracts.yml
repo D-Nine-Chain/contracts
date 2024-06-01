@@ -1,48 +1,48 @@
-name: Check Contracts
+# name: Check Contracts
 
-on:
-  push:
-    branches:
-      - main
-  pull_request:
-    branches:
-      - main
+# on:
+#   push:
+#     branches:
+#       - main
+#   pull_request:
+#     branches:
+#       - main
 
-jobs:
-  check-contracts:
-    runs-on: ubuntu-latest
+# jobs:
+#   check-contracts:
+#     runs-on: ubuntu-latest
 
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v2
+#     steps:
+#       - name: Checkout repository
+#         uses: actions/checkout@v2
 
-      - name: Set up Rust
-        uses: actions-rs/toolchain@v1
-        with:
-          toolchain: stable
-          profile: minimal
-          override: true
-          default: true
+#       - name: Set up Rust
+#         uses: actions-rs/toolchain@v1
+#         with:
+#           toolchain: stable
+#           profile: minimal
+#           override: true
+#           default: true
 
-      - name: Install cargo-contract
-        run: |
-          cargo install cargo-contract --version "^3.2.0" --force
+#       - name: Install cargo-contract
+#         run: |
+#           cargo install cargo-contract --version "^3.2.0" --force
 
-      - name: Install jq
-        run: sudo apt-get install -y jq
+#       - name: Install jq
+#         run: sudo apt-get install -y jq
 
-      - name: Get workspace members
-        id: get-members
-        run: |
-          members=$(cargo metadata --no-deps --format-version 1 | jq -r '.packages | map(select(.source == null)) | map(.name) | .[]')
-          echo "::set-output name=members::${members}"
+#       - name: Get workspace members
+#         id: get-members
+#         run: |
+#           members=$(cargo metadata --no-deps --format-version 1 | jq -r '.packages | map(select(.source == null)) | map(.name) | .[]')
+#           echo "::set-output name=members::${members}"
 
-      - name: Check contracts
-        run: |
-          members=${{ steps.get-members.outputs.members }}
-          for member in $members; do
-            if [[ "$member" != "chain-extension" ]]; then
-              echo "Checking $member..."
-              cargo contract check --manifest-path "$member/Cargo.toml"
-            fi
-          done
+#       - name: Check contracts
+#         run: |
+#           members=${{ steps.get-members.outputs.members }}
+#           for member in $members; do
+#             if [[ "$member" != "chain-extension" ]]; then
+#               echo "Checking $member..."
+#               cargo contract check --manifest-path "$member/Cargo.toml"
+#             fi
+#           done

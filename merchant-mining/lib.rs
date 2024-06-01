@@ -642,7 +642,7 @@ mod d9_merchant_mining {
                 return Err(Error::NoAccountCantCreateMerchantAccount);
             }
             let account = account_option.unwrap();
-            let threshold_points: Balance = 1_000_000;
+            let threshold_points: Balance = 100_000_000;
             if account.green_points < threshold_points {
                 return Err(Error::PointsInsufficientToCreateMerchantAccount);
             }

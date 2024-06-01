@@ -52,7 +52,6 @@ pub mod d9_burn_mining {
             self.total_amount_burned
         }
 
-
         #[ink(message)]
         pub fn set_day_milliseconds(
             &mut self,
@@ -98,16 +97,13 @@ pub mod d9_burn_mining {
         /// executes burn function and updates internal state
         fn _burn(&mut self, account_id: AccountId, amount: Balance) -> Balance {
             self.total_amount_burned = self.total_amount_burned.saturating_add(amount);
-
             // The balance the account is due after the burn
             let balance_due = amount.saturating_mul(3);
-
             // Fetch the account if it exists, or initialize a new one if it doesn't
             let mut account = self
                 .accounts
                 .get(&account_id)
                 .unwrap_or(Account::new(self.env().block_timestamp()));
-
             // Update account details
             account.amount_burned = account.amount_burned.saturating_add(amount);
             let new_time = self.env().block_timestamp();

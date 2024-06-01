@@ -1,6 +1,6 @@
 {
   "source": {
-    "hash": "0xb478c961f1eedbf60fcb1770a2657bc3939456551c1192880a505c379749e9e3",
+    "hash": "0x9f000ff8f7589d1a2a648c655d51afc2723530a1f268e5751f49d1e04c047c1f",
     "language": "ink! 4.3.0",
     "compiler": "rustc 1.76.0",
     "build_info": {
@@ -15,7 +15,7 @@
   },
   "contract": {
     "name": "d9-merchant-mining",
-    "version": "0.2.1",
+    "version": "0.2.0",
     "authors": [
       "D9Dev"
     ]
@@ -1241,6 +1241,14 @@
               {
                 "index": 39,
                 "name": "CrossContractCallErrorGettingEstimate"
+              },
+              {
+                "index": 40,
+                "name": "NoAccountCantCreateMerchantAccount"
+              },
+              {
+                "index": 41,
+                "name": "PointsInsufficientToCreateMerchantAccount"
               }
             ]
           }

@@ -25,8 +25,6 @@ mod d9_merchant_mining {
         mining_pool: AccountId,
         milliseconds_day: Timestamp,
         admin: AccountId,
-        // total number of d9 processed
-        // processed_d9: Balance,
     }
 
     #[derive(Decode, Encode, Clone)]
@@ -136,6 +134,8 @@ mod d9_merchant_mining {
         EcdsaRecoveryFailed,
         ErrorGettingEstimate,
         CrossContractCallErrorGettingEstimate,
+        NoAccountCantCreateMerchantAccount,
+        PointsInsufficientToCreateMerchantAccount,
     }
 
     impl From<EnvError> for Error {
@@ -238,9 +238,9 @@ mod d9_merchant_mining {
                 accounts: Default::default(),
                 subscription_fee: 1000,
                 milliseconds_day: 86_400_000,
-                // processed_d9: Balance::default(),
             }
         }
+
         // old main xssaidD9aqTCqsbLn1ncF2gtZyr4MreBXzXT8fquLZfcMrB
         /// create merchant account subscription
         #[ink(message)]
@@ -249,10 +249,9 @@ mod d9_merchant_mining {
             if usdt_amount < self.subscription_fee {
                 return Err(Error::InsufficientPayment);
             }
+            let _ = self.check_subscription_permissibility(merchant_id)?;
             let _ = self.validate_usdt_transfer(merchant_id, usdt_amount)?;
-
             let _ = self.receive_usdt_from_user(merchant_id, usdt_amount)?;
-
             let send_usdt_result = self.contract_sends_usdt_to(self.amm_contract, usdt_amount);
             if send_usdt_result.is_err() {
                 return Err(Error::SendingUSDTToAMM);
@@ -262,16 +261,6 @@ mod d9_merchant_mining {
 
             update_expiry_result
         }
-
-        /// get the total of d9 processed by this contract e.g. d9 used to get green points
-        // #[ink(message)]
-        // pub fn get_total_merchant_processed_d9(&self) -> Balance {
-        //     self.processed_d9
-        // }
-
-        // fn credit_pool(&mut self, amount: Balance) {
-        //     self.processed_d9 = self.processed_d9.saturating_add(amount);
-        // }
 
         ///create/update subscription, returns new expiry `Timestamp` Result
         fn update_subscription(
@@ -351,9 +340,6 @@ mod d9_merchant_mining {
             account: &mut Account,
             redeemable_red_points: Balance,
         ) -> Result<Balance, Error> {
-
-       
-
             //calculated red points => d9 conversion
             let redeemable_usdt = redeemable_red_points.saturating_div(100);
             let redeem_result = self.mining_pool_redeem(recipient_id, redeemable_usdt);
@@ -363,7 +349,7 @@ mod d9_merchant_mining {
             let d9_amount = redeem_result.unwrap();
             //update account
             account.redeemed_d9 = account.redeemed_d9.saturating_add(d9_amount);
-          
+
             account.relationship_factors = (0, 0);
 
             //attempt to pay ancestors
@@ -374,10 +360,10 @@ mod d9_merchant_mining {
             if let Some(ancestors) = self.get_ancestors(recipient_id) {
                 let _ = self.update_ancestors_coefficients(&ancestors, time_based_red_points);
             }
-            
+
             account.last_conversion = Some(self.env().block_timestamp());
             account.green_points = account.green_points.saturating_sub(redeemable_red_points);
-            
+
             self.env().emit_event(D9Redeemed {
                 account_id: recipient_id,
                 redeemed_d9: d9_amount,
@@ -648,6 +634,19 @@ mod d9_merchant_mining {
                 )
             });
             ink::env::debug_println!("Switched code hash to {:?}.", code_hash);
+        }
+
+        fn check_subscription_permissibility(&self, account_id: AccountId) -> Result<(), Error> {
+            let account_option = self.accounts.get(&account_id);
+            if account_option.is_none() {
+                return Err(Error::NoAccountCantCreateMerchantAccount);
+            }
+            let account = account_option.unwrap();
+            let threshold_points: Balance = 1_000_000;
+            if account.green_points < threshold_points {
+                return Err(Error::PointsInsufficientToCreateMerchantAccount);
+            }
+            Ok(())
         }
 
         fn validate_usdt_transfer(&self, account: AccountId, amount: Balance) -> Result<(), Error> {

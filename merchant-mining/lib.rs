@@ -934,7 +934,13 @@ mod d9_merchant_mining {
                 .get(&account_id)
                 .unwrap_or(Account::new(self.env().block_timestamp()));
             let redeemable_red_points = self.calc_total_redeemable_red_points(&account);
-            if redeemable_red_points > 0 {
+            let twenty_four_hours_prior = self.env().block_timestamp().saturating_sub(86_400_000);
+            let permit_based_on_last_conversion: bool = match account.last_conversion {
+                Some(last_conversion) => last_conversion < twenty_four_hours_prior,
+                None => true,
+            };
+
+            if redeemable_red_points > 0 && permit_based_on_last_conversion {
                 let disburse_result =
                     self.disburse_d9(account_id, &mut account, redeemable_red_points);
                 if let Err(e) = disburse_result {

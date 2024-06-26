@@ -275,7 +275,7 @@ mod d9_merchant_mining {
             let one_month: Timestamp = self.milliseconds_day * 30;
             let current_expiry: Timestamp = match self.merchant_expiry.get(&account_id) {
                 Some(expiry) => {
-                    if expiry < self.env().block_timestamp().saturating_sub(one_month) {
+                    if expiry < self.env().block_timestamp() {
                         self.env().block_timestamp()
                     } else {
                         expiry

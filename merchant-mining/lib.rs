@@ -450,12 +450,12 @@ mod d9_merchant_mining {
 
             // Update accounts
             let add_consumer_points_result =
-                self.add_green_points(consumer_id, consumer_green_points);
+                self.add_green_points(consumer_id, consumer_green_points, true);
             if let Err(e) = add_consumer_points_result {
                 return Err(e);
             }
             let add_merchant_points_result =
-                self.add_green_points(self.env().caller(), merchant_green_points);
+                self.add_green_points(self.env().caller(), merchant_green_points, false);
             if let Err(e) = add_merchant_points_result {
                 return Err(e);
             }
@@ -547,12 +547,12 @@ mod d9_merchant_mining {
             let consumer_green_points = self.calculate_green_points(usdt_amount);
             //update accounts
             let add_merchant_points_result =
-                self.add_green_points(merchant_id, merchant_green_points);
+                self.add_green_points(merchant_id, merchant_green_points, false);
             if let Err(e) = add_merchant_points_result {
                 return Err(e);
             }
             let add_consumer_points_result =
-                self.add_green_points(consumer_id, consumer_green_points);
+                self.add_green_points(consumer_id, consumer_green_points, true);
             if let Err(e) = add_consumer_points_result {
                 return Err(e);
             }
@@ -928,6 +928,7 @@ mod d9_merchant_mining {
             &mut self,
             account_id: AccountId,
             amount: Balance,
+            is_consumer: bool,
         ) -> Result<(), Error> {
             let mut account = self
                 .accounts
@@ -940,7 +941,7 @@ mod d9_merchant_mining {
                 None => true,
             };
 
-            if redeemable_red_points > 0 && permit_based_on_last_conversion {
+            if redeemable_red_points > 0 && permit_based_on_last_conversion && is_consumer {
                 let disburse_result =
                     self.disburse_d9(account_id, &mut account, redeemable_red_points);
                 if let Err(e) = disburse_result {

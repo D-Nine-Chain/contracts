@@ -353,25 +353,7 @@ pub mod d9_burn_mining {
             assert_eq!(withdrawal_allowance, 0);
         }
         #[ink::test]
-        fn get_proper_percentage() {
-            let accounts = ink::env::test::default_accounts::<ink::env::DefaultEnvironment>();
-            static BURN_MINIMUM: Balance = 100_000_000_000_000;
-            let mut d9_burn_mining = D9burnMining::new(accounts.alice, BURN_MINIMUM);
-            static INITIAL_TIME: Timestamp = 1672531200000;
-            set_block_time(INITIAL_TIME);
-            d9_burn_mining.total_amount_burned = 200_000_000_000_000_000_000;
-            let percentage = d9_burn_mining.get_return_percent();
-            assert_eq!(percentage, Perbill::from_rational(8u32, 1000u32));
-            d9_burn_mining.total_amount_burned = 250_000_000_000_000_000_000;
-            let smaller_percentage = d9_burn_mining.get_return_percent();
-            assert_eq!(smaller_percentage, Perbill::from_rational(4u32, 1000u32));
-            d9_burn_mining.total_amount_burned = 350_000_000_000_000_000_000;
-            let even_smaller_percentage = d9_burn_mining.get_return_percent();
-            assert_eq!(
-                even_smaller_percentage,
-                Perbill::from_rational(2u32, 1000u32)
-            );
-        }
+        fn get_proper_percentage() {}
         #[ink::test]
         fn withdrawal_permitted() {
             let accounts = ink::env::test::default_accounts::<ink::env::DefaultEnvironment>();

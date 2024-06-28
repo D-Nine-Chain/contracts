@@ -1,10 +1,10 @@
 {
   "source": {
-    "hash": "0xada13b1c59210e8bf035e29b9fb6fe041b8b580c9adfeb7e6256eff22b91bc0d",
+    "hash": "0x12ad8907ce9facdaf3fb2037406a6fe70eee17d795d010f24165700d9fc8f47d",
     "language": "ink! 4.3.0",
     "compiler": "rustc 1.79.0",
     "build_info": {
-      "build_mode": "Release",
+      "build_mode": "Debug",
       "cargo_contract_version": "3.2.0",
       "rust_toolchain": "stable-aarch64-apple-darwin",
       "wasm_opt_settings": {
@@ -14,10 +14,10 @@
     }
   },
   "contract": {
-    "name": "d9-merchant-mining",
-    "version": "1.4.0",
+    "name": "merchant_v2",
+    "version": "0.1.0",
     "authors": [
-      "D9Dev"
+      "D9 Network tech@d9network.com"
     ]
   },
   "spec": {
@@ -689,11 +689,11 @@
                 "root": {
                   "layout": {
                     "leaf": {
-                      "key": "0x368a973a",
+                      "key": "0xf06af0e3",
                       "ty": 0
                     }
                   },
-                  "root_key": "0x368a973a"
+                  "root_key": "0xf06af0e3"
                 }
               },
               "name": "merchant_expiry"
@@ -707,7 +707,7 @@
                         {
                           "layout": {
                             "leaf": {
-                              "key": "0xfe031739",
+                              "key": "0xb8327ee3",
                               "ty": 1
                             }
                           },
@@ -720,7 +720,7 @@
                                 {
                                   "layout": {
                                     "leaf": {
-                                      "key": "0xfe031739",
+                                      "key": "0xb8327ee3",
                                       "ty": 1
                                     }
                                   },
@@ -729,7 +729,7 @@
                                 {
                                   "layout": {
                                     "leaf": {
-                                      "key": "0xfe031739",
+                                      "key": "0xb8327ee3",
                                       "ty": 1
                                     }
                                   },
@@ -744,7 +744,7 @@
                         {
                           "layout": {
                             "enum": {
-                              "dispatchKey": "0xfe031739",
+                              "dispatchKey": "0xb8327ee3",
                               "name": "Option",
                               "variants": {
                                 "0": {
@@ -756,7 +756,7 @@
                                     {
                                       "layout": {
                                         "leaf": {
-                                          "key": "0xfe031739",
+                                          "key": "0xb8327ee3",
                                           "ty": 0
                                         }
                                       },
@@ -773,7 +773,7 @@
                         {
                           "layout": {
                             "leaf": {
-                              "key": "0xfe031739",
+                              "key": "0xb8327ee3",
                               "ty": 1
                             }
                           },
@@ -782,7 +782,7 @@
                         {
                           "layout": {
                             "leaf": {
-                              "key": "0xfe031739",
+                              "key": "0xb8327ee3",
                               "ty": 1
                             }
                           },
@@ -791,7 +791,7 @@
                         {
                           "layout": {
                             "leaf": {
-                              "key": "0xfe031739",
+                              "key": "0xb8327ee3",
                               "ty": 0
                             }
                           },
@@ -801,7 +801,7 @@
                       "name": "Account"
                     }
                   },
-                  "root_key": "0xfe031739"
+                  "root_key": "0xb8327ee3"
                 }
               },
               "name": "accounts"
@@ -861,7 +861,7 @@
               "name": "admin"
             }
           ],
-          "name": "D9MerchantMining"
+          "name": "D9MerchantV2"
         }
       },
       "root_key": "0x00000000"
@@ -1254,8 +1254,8 @@
           }
         },
         "path": [
-          "d9_merchant_mining",
-          "d9_merchant_mining",
+          "merchant_v2",
+          "merchant_v2",
           "Error"
         ]
       }
@@ -1448,8 +1448,8 @@
           }
         },
         "path": [
-          "d9_merchant_mining",
-          "d9_merchant_mining",
+          "merchant_v2",
+          "merchant_v2",
           "GreenPointsResult"
         ]
       }
@@ -1569,8 +1569,8 @@
           }
         },
         "path": [
-          "d9_merchant_mining",
-          "d9_merchant_mining",
+          "merchant_v2",
+          "merchant_v2",
           "Account"
         ]
       }
@@ -1765,8 +1765,8 @@
           }
         },
         "path": [
-          "d9_merchant_mining",
-          "d9_merchant_mining",
+          "merchant_v2",
+          "merchant_v2",
           "GreenPointsCreated"
         ]
       }

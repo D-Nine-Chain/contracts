@@ -24,5 +24,6 @@ Cargo.lock
 **/cache
 **/artifacts
 **/.DS_Store
+**/.zed
 subalfred
 **/.DS_Store

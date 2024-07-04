@@ -8,7 +8,7 @@ mod market_maker {
     use ink::{
         env::{
             call::{build_call, ExecutionInput, Selector},
-            Error,
+            Error as EnvError,
         },
         LangError,
     };
@@ -111,14 +111,14 @@ mod market_maker {
         OtherEnvironmentError,
         LangError(LangError),
     }
-    impl From<Error> for ContractError {
-        fn from(_error: Error) -> Self {
+    impl From<EnvError> for ContractError {
+        fn from(_error: EnvError) -> Self {
             match _error {
-                Error::Decode(_e) => ContractError::ScaleDecodeError,
-                Error::CalleeTrapped => ContractError::CalleeTrapped,
-                Error::CalleeReverted => ContractError::CalleeReverted,
-                Error::KeyNotFound => ContractError::StorageKeyNotFound,
-                Error::TransferFailed => ContractError::TransferFailed,
+                EnvError::Decode(_e) => ContractError::ScaleDecodeError,
+                EnvError::CalleeTrapped => ContractError::CalleeTrapped,
+                EnvError::CalleeReverted => ContractError::CalleeReverted,
+                EnvError::KeyNotFound => ContractError::StorageKeyNotFound,
+                EnvError::TransferFailed => ContractError::TransferFailed,
                 _ => ContractError::OtherEnvironmentError,
             }
         }

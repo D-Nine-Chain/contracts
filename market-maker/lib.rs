@@ -20,7 +20,7 @@ mod market_maker {
     pub struct MarketMaker {
         /// contract for usdt coin
         usdt_contract: AccountId,
-        /// part per quintillion
+        /// part per quintillion (this number times 1 billion gives parts per quintillion).
         fee_percent: u32,
         /// total fees collected
         fee_total: Balance,
@@ -151,7 +151,7 @@ mod market_maker {
             self.only_admin();
             self.admin = new_admin;
         }
-
+        #[ink(message)]
         pub fn change_fee_percent(&mut self, new_fee_percent: u32) -> () {
             self.only_admin();
             self.fee_percent = new_fee_percent;
@@ -538,7 +538,9 @@ mod market_maker {
         }
 
         fn calc_fee(&self, amount: Balance) -> Balance {
-            let fee_percent = Perquintill::from_parts(self.fee_percent as u64);
+            let adjusted_from_parts: u64 =
+                (1_000_000_000 as u64).saturating_mul(self.fee_percent as u64);
+            let fee_percent = Perquintill::from_parts(adjusted_from_parts);
             fee_percent.mul_floor(amount)
         }
 

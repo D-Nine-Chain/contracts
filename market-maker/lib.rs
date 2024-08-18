@@ -156,7 +156,10 @@ mod market_maker {
             self.only_admin();
             self.fee_percent = new_fee_percent;
         }
-
+        #[ink(message)]
+        pub fn get_total_lp_tokens(&self) -> Balance {
+            self.total_lp_tokens
+        }
         /// get pool balances (d9, usdt)
         #[ink(message)]
         pub fn get_currency_reserves(&self) -> Result<(Balance, Balance), ContractError> {

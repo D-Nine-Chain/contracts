@@ -1,8 +1,8 @@
 {
   "source": {
-    "hash": "0x8fa811578dd0541e095e3745bc6caded6e819e443e86cd71a61c04ab8cff5afa",
+    "hash": "0xd215283db7fe7c14361e57395565d8fccc14b7a1d09b520ee7d209cb5bebdfc6",
     "language": "ink! 4.3.0",
-    "compiler": "rustc 1.76.0",
+    "compiler": "rustc 1.79.0",
     "build_info": {
       "build_mode": "Release",
       "cargo_contract_version": "3.2.0",
@@ -15,7 +15,7 @@
   },
   "contract": {
     "name": "market-maker",
-    "version": "0.1.0",
+    "version": "1.0.0",
     "authors": [
       "D9Dev"
     ]
@@ -317,6 +317,22 @@
         "selector": "0x43b2d0e6"
       },
       {
+        "args": [],
+        "default": false,
+        "docs": [],
+        "label": "get_total_lp_tokens",
+        "mutates": false,
+        "payable": false,
+        "returnType": {
+          "displayName": [
+            "ink",
+            "MessageResult"
+          ],
+          "type": 10
+        },
+        "selector": "0x25445509"
+      },
+      {
         "args": [
           {
             "label": "account_id",
@@ -338,7 +354,7 @@
             "ink",
             "MessageResult"
           ],
-          "type": 10
+          "type": 11
         },
         "selector": "0x32e702ad"
       },
@@ -366,7 +382,7 @@
             "ink",
             "MessageResult"
           ],
-          "type": 12
+          "type": 13
         },
         "selector": "0x264cd04b"
       },
@@ -382,7 +398,7 @@
             "ink",
             "MessageResult"
           ],
-          "type": 12
+          "type": 13
         },
         "selector": "0xbdd16bfa"
       },
@@ -446,7 +462,7 @@
             "ink",
             "MessageResult"
           ],
-          "type": 12
+          "type": 13
         },
         "selector": "0x5a150c03"
       },
@@ -474,7 +490,7 @@
             "ink",
             "MessageResult"
           ],
-          "type": 16
+          "type": 17
         },
         "selector": "0x0edab8e1"
       },
@@ -492,7 +508,7 @@
             "ink",
             "MessageResult"
           ],
-          "type": 16
+          "type": 17
         },
         "selector": "0x5b41ab8a"
       },
@@ -529,7 +545,7 @@
             "ink",
             "MessageResult"
           ],
-          "type": 18
+          "type": 10
         },
         "selector": "0xbdcee4ed"
       },
@@ -566,7 +582,7 @@
             "ink",
             "MessageResult"
           ],
-          "type": 16
+          "type": 17
         },
         "selector": "0x2413eb9a"
       },
@@ -638,7 +654,7 @@
             "ink",
             "MessageResult"
           ],
-          "type": 12
+          "type": 13
         },
         "selector": "0x4a74f8d9"
       }
@@ -911,7 +927,7 @@
               {
                 "fields": [
                   {
-                    "type": 11
+                    "type": 4
                   }
                 ],
                 "index": 0,
@@ -932,7 +948,7 @@
         "params": [
           {
             "name": "T",
-            "type": 11
+            "type": 4
           },
           {
             "name": "E",
@@ -946,6 +962,48 @@
     },
     {
       "id": 11,
+      "type": {
+        "def": {
+          "variant": {
+            "variants": [
+              {
+                "fields": [
+                  {
+                    "type": 12
+                  }
+                ],
+                "index": 0,
+                "name": "Ok"
+              },
+              {
+                "fields": [
+                  {
+                    "type": 7
+                  }
+                ],
+                "index": 1,
+                "name": "Err"
+              }
+            ]
+          }
+        },
+        "params": [
+          {
+            "name": "T",
+            "type": 12
+          },
+          {
+            "name": "E",
+            "type": 7
+          }
+        ],
+        "path": [
+          "Result"
+        ]
+      }
+    },
+    {
+      "id": 12,
       "type": {
         "def": {
           "variant": {
@@ -978,7 +1036,7 @@
       }
     },
     {
-      "id": 12,
+      "id": 13,
       "type": {
         "def": {
           "variant": {
@@ -986,7 +1044,7 @@
               {
                 "fields": [
                   {
-                    "type": 13
+                    "type": 14
                   }
                 ],
                 "index": 0,
@@ -1007,7 +1065,7 @@
         "params": [
           {
             "name": "T",
-            "type": 13
+            "type": 14
           },
           {
             "name": "E",
@@ -1020,7 +1078,7 @@
       }
     },
     {
-      "id": 13,
+      "id": 14,
       "type": {
         "def": {
           "variant": {
@@ -1037,7 +1095,7 @@
               {
                 "fields": [
                   {
-                    "type": 14
+                    "type": 15
                   }
                 ],
                 "index": 1,
@@ -1053,7 +1111,7 @@
           },
           {
             "name": "E",
-            "type": 14
+            "type": 15
           }
         ],
         "path": [
@@ -1062,7 +1120,7 @@
       }
     },
     {
-      "id": 14,
+      "id": 15,
       "type": {
         "def": {
           "variant": {
@@ -1082,7 +1140,7 @@
               {
                 "fields": [
                   {
-                    "type": 15,
+                    "type": 16,
                     "typeName": "Currency"
                   }
                 ],
@@ -1096,7 +1154,7 @@
               {
                 "fields": [
                   {
-                    "type": 15,
+                    "type": 16,
                     "typeName": "Currency"
                   }
                 ],
@@ -1168,7 +1226,7 @@
       }
     },
     {
-      "id": 15,
+      "id": 16,
       "type": {
         "def": {
           "variant": {
@@ -1192,7 +1250,7 @@
       }
     },
     {
-      "id": 16,
+      "id": 17,
       "type": {
         "def": {
           "variant": {
@@ -1200,7 +1258,7 @@
               {
                 "fields": [
                   {
-                    "type": 17
+                    "type": 18
                   }
                 ],
                 "index": 0,
@@ -1221,53 +1279,11 @@
         "params": [
           {
             "name": "T",
-            "type": 17
+            "type": 18
           },
           {
             "name": "E",
             "type": 7
-          }
-        ],
-        "path": [
-          "Result"
-        ]
-      }
-    },
-    {
-      "id": 17,
-      "type": {
-        "def": {
-          "variant": {
-            "variants": [
-              {
-                "fields": [
-                  {
-                    "type": 4
-                  }
-                ],
-                "index": 0,
-                "name": "Ok"
-              },
-              {
-                "fields": [
-                  {
-                    "type": 14
-                  }
-                ],
-                "index": 1,
-                "name": "Err"
-              }
-            ]
-          }
-        },
-        "params": [
-          {
-            "name": "T",
-            "type": 4
-          },
-          {
-            "name": "E",
-            "type": 14
           }
         ],
         "path": [
@@ -1293,7 +1309,7 @@
               {
                 "fields": [
                   {
-                    "type": 7
+                    "type": 15
                   }
                 ],
                 "index": 1,
@@ -1309,7 +1325,7 @@
           },
           {
             "name": "E",
-            "type": 7
+            "type": 15
           }
         ],
         "path": [
@@ -1324,11 +1340,11 @@
           "composite": {
             "fields": [
               {
-                "type": 15,
+                "type": 16,
                 "typeName": "Currency"
               },
               {
-                "type": 15,
+                "type": 16,
                 "typeName": "Currency"
               }
             ]
@@ -1401,7 +1417,7 @@
               {
                 "fields": [
                   {
-                    "type": 14
+                    "type": 15
                   }
                 ],
                 "index": 1,
@@ -1417,7 +1433,7 @@
           },
           {
             "name": "E",
-            "type": 14
+            "type": 15
           }
         ],
         "path": [

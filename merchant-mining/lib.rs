@@ -310,6 +310,17 @@ mod d9_merchant_mining {
             if redeemable_red_points == 0 {
                 return Err(Error::NothingToRedeem);
             }
+            let is_within_24_hr_lockout = match account.last_conversion {
+                Some(last_conversion) => {
+                    let twenty_four_hours_prior =
+                        self.env().block_timestamp().saturating_sub(86_400_000);
+                    twenty_four_hours_prior < last_conversion
+                }
+                None => false,
+            };
+            if is_within_24_hr_lockout {
+                return Err(Error::NothingToRedeem);
+            }
             let disburse_result = self.disburse_d9(caller, &mut account, redeemable_red_points);
             self.accounts.insert(caller, &account);
             return disburse_result;

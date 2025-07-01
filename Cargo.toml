@@ -12,4 +12,5 @@ members = [
      "mining-pool",
      "node-reward",
      "cross-chain-transfer",
+     "price-oracle"
 ]

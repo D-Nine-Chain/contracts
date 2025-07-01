@@ -1,8 +1,8 @@
 {
   "source": {
-    "hash": "0xd215283db7fe7c14361e57395565d8fccc14b7a1d09b520ee7d209cb5bebdfc6",
+    "hash": "0xc53213fc020dda926eff0134c0630e29c065d454aacb181917d4c3ab3260b5b8",
     "language": "ink! 4.3.0",
-    "compiler": "rustc 1.79.0",
+    "compiler": "rustc 1.83.0",
     "build_info": {
       "build_mode": "Release",
       "cargo_contract_version": "3.2.0",
@@ -15,7 +15,7 @@
   },
   "contract": {
     "name": "market-maker",
-    "version": "1.0.0",
+    "version": "1.1.0",
     "authors": [
       "D9Dev"
     ]

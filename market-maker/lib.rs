@@ -487,7 +487,7 @@ mod market_maker {
             if balance_1 == 0 {
                 return Err(Error::InsufficientLiquidity(direction.1));
             }
-            self.calc_opposite_currency_amount(balance_0, balance_1, amount_0)
+            self.calc_opposite_currency_amount(direction, balance_0, balance_1, amount_0)
         }
 
         #[ink(message)]
@@ -504,6 +504,7 @@ mod market_maker {
                 return Err(Error::InsufficientLiquidity(direction.1));
             }
             let amount_1 = self.calc_opposite_currency_amount(
+                direction,
                 balance_0.saturating_add(amount_0),
                 balance_1,
                 amount_0,
@@ -513,22 +514,44 @@ mod market_maker {
 
         pub fn calc_opposite_currency_amount(
             &self,
+            direction: Direction,
             balance_0: Balance,
             balance_1: Balance,
             amount_0: Balance,
         ) -> Result<Balance, Error> {
+            // Decimal scaling factor - difference between D9 (12 decimals) and USDT (2 decimals)
+            let decimal_adjustment: u128 = 10_000_000_000; // 10^10
+
+            let (working_balance_1, result_scaling): =
+                if direction == Direction(Currency::D9, Currency::USDT) {
+                    // When converting D9 to USDT, scale up USDT for calculation, then scale down result
+                    (
+                        balance_1.saturating_mul(decimal_adjustment),
+                        decimal_adjustment,
+                    )
+                } else {
+                    // When converting USDT to D9, no need for special handling
+                    (balance_1, 1)
+                };
+
+            // Perform calculation with adjusted values
             let fixed_balance_0 = FixedBalance::from_num(balance_0);
-            let fixed_balance_1 = FixedBalance::from_num(balance_1);
+            let fixed_balance_1 = FixedBalance::from_num(working_balance_1);
             let fixed_amount_0 = FixedBalance::from_num(amount_0);
+
             let fixed_curve_k = fixed_balance_0.saturating_mul(fixed_balance_1);
             let new_balance_0 = fixed_balance_0.saturating_add(fixed_amount_0);
+
             let new_balance_1_opt = fixed_curve_k.checked_div(new_balance_0);
             if new_balance_1_opt.is_none() {
                 return Err(Error::DivisionByZero);
             }
+
             let new_balance_1 = new_balance_1_opt.unwrap();
             let amount_1 = fixed_balance_1.saturating_sub(new_balance_1);
-            Ok(amount_1.to_num::<Balance>())
+
+            // Scale down the result if needed
+            Ok(amount_1.to_num::<Balance>().saturating_div(result_scaling))
         }
 
         fn calc_fee(&self, amount: Balance) -> Balance {

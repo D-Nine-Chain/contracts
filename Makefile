@@ -8,7 +8,7 @@ BLUE := \033[0;34m
 NC := \033[0m # No Color
 
 # Contract directories
-CONTRACTS := market-maker merchant-mining mining-pool
+CONTRACTS := burn/d9-burn-mining cross-chain-transfer main-pool market-maker merchant-mining mining-pool node-reward
 CONTRACT_DIR := ./
 
 # Upload history file

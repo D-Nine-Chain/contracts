@@ -1,0 +1,135 @@
+name: PR Contract Verification
+on:
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  detect-changes:
+    runs-on: ubuntu-latest
+    outputs:
+      contracts: ${{ steps.detect.outputs.contracts }}
+    steps:
+      - uses: actions/checkout@v3
+        with:
+          fetch-depth: 0
+      
+      - name: Detect changed contracts
+        id: detect
+        run: |
+          # Get all changed files
+          CHANGED_FILES=$(git diff --name-only origin/${{ github.base_ref }}...HEAD)
+          
+          # Find all Cargo.toml files that indicate contracts
+          CONTRACTS=""
+          for file in $CHANGED_FILES; do
+            # Check if it's in a contract directory (has Cargo.toml with ink dependency)
+            DIR=$(dirname "$file")
+            while [[ "$DIR" != "." && "$DIR" != "/" ]]; do
+              if [[ -f "$DIR/Cargo.toml" ]] && grep -q "ink.*=" "$DIR/Cargo.toml" 2>/dev/null; then
+                # Extract just the contract directory name
+                CONTRACT_NAME=$(basename "$DIR")
+                # Avoid duplicates
+                if [[ ! " $CONTRACTS " =~ " $CONTRACT_NAME " ]]; then
+                  CONTRACTS="$CONTRACTS $CONTRACT_NAME"
+                fi
+                break
+              fi
+              DIR=$(dirname "$DIR")
+            done
+          done
+          
+          # Convert to JSON array for matrix
+          if [[ -n "$CONTRACTS" ]]; then
+            JSON_ARRAY=$(echo "$CONTRACTS" | xargs -n1 | jq -R . | jq -s .)
+            echo "contracts=$JSON_ARRAY" >> $GITHUB_OUTPUT
+            echo "Found changed contracts: $CONTRACTS"
+          else
+            echo "contracts=[]" >> $GITHUB_OUTPUT
+            echo "No contract changes detected"
+          fi
+
+  verify-contracts:
+    needs: detect-changes
+    if: ${{ needs.detect-changes.outputs.contracts != '[]' }}
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        contract: ${{ fromJson(needs.detect-changes.outputs.contracts) }}
+    
+    steps:
+      - uses: actions/checkout@v3
+        with:
+          fetch-depth: 0  # Need full history
+      
+      - name: Set up Rust
+        uses: dtolnay/rust-toolchain@stable
+        
+      - name: Install tools
+        run: |
+          cargo install cargo-contract --version 3.2.0
+          sudo apt-get update && sudo apt-get install -y b2sum python3
+          
+      - name: Check storage changes
+        run: |
+          # Compare storage with base branch
+          echo "Checking storage for ${{ matrix.contract }}..."
+          python3 scripts/verify_storage.py check ${{ matrix.contract }} || {
+            echo "::warning::Storage structure changed in ${{ matrix.contract }}"
+          }
+          
+      - name: Build and test
+        working-directory: ${{ matrix.contract }}
+        run: |
+          cargo check --all-features
+          cargo test
+          cargo clippy -- -D warnings
+          cargo contract build --release
+          
+      - name: Calculate code hash
+        id: codehash
+        working-directory: ${{ matrix.contract }}
+        run: |
+          # Use b2sum (blake2) to calculate hash
+          HASH=$(b2sum -l 256 target/ink/*.wasm | cut -d' ' -f1)
+          echo "hash=$HASH" >> $GITHUB_OUTPUT
+          echo "Contract: ${{ matrix.contract }}"
+          echo "Code Hash: $HASH"
+          
+      - name: Post results as PR comment
+        uses: actions/github-script@v6
+        if: github.event_name == 'pull_request'
+        with:
+          script: |
+            const contract = '${{ matrix.contract }}';
+            const hash = '${{ steps.codehash.outputs.hash }}';
+            const body = `### ✅ ${contract} Verification Results\n\n**Code Hash:** \`${hash}\`\n**Status:** All checks passed`;
+            
+            // Find existing comment
+            const comments = await github.rest.issues.listComments({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+            });
+            
+            const botComment = comments.data.find(comment => 
+              comment.user.type === 'Bot' && 
+              comment.body.includes(`### ✅ ${contract} Verification Results`)
+            );
+            
+            if (botComment) {
+              // Update existing comment
+              await github.rest.issues.updateComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                comment_id: botComment.id,
+                body: body
+              });
+            } else {
+              // Create new comment
+              await github.rest.issues.createComment({
+                issue_number: context.issue.number,
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                body: body
+              });
+            }

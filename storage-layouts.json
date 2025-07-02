@@ -1,0 +1,49 @@
+{
+  "mining-pool": [
+    {
+      "name": "admin",
+      "field_type": "AccountId",
+      "position": 0
+    },
+    {
+      "name": "main_contract",
+      "field_type": "AccountId",
+      "position": 1
+    },
+    {
+      "name": "merchant_contract",
+      "field_type": "AccountId",
+      "position": 2
+    },
+    {
+      "name": "node_reward_contract",
+      "field_type": "AccountId",
+      "position": 3
+    },
+    {
+      "name": "amm_contract",
+      "field_type": "AccountId",
+      "position": 4
+    },
+    {
+      "name": "merchant_volume",
+      "field_type": "Balance",
+      "position": 5
+    },
+    {
+      "name": "volume_at_index",
+      "field_type": "Mapping<u32",
+      "position": 6
+    },
+    {
+      "name": "last_session",
+      "field_type": "u32",
+      "position": 7
+    },
+    {
+      "name": "accumulative_reward_pool",
+      "field_type": "Balance",
+      "position": 8
+    }
+  ]
+}

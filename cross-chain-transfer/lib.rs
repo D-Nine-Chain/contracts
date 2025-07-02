@@ -155,7 +155,7 @@ mod cross_chain_transfer {
 
         #[ink(message)]
         pub fn record_cancelled_tron_transfer(&mut self, user_id: AccountId) -> Result<(), Error> {
-            let _ = self.only_callable_by(self.controller)?;
+            self.only_callable_by(self.controller)?;
             self.increase_transaction_nonce(user_id);
             Ok(())
         }

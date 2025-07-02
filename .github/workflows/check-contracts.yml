@@ -1,48 +1,59 @@
-# name: Check Contracts
+name: Check Contracts
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
 
-# on:
-#   push:
-#     branches:
-#       - main
-#   pull_request:
-#     branches:
-#       - main
+jobs:
+  check-contracts:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v3  # Updated to v3
 
-# jobs:
-#   check-contracts:
-#     runs-on: ubuntu-latest
+      - name: Set up Rust
+        uses: dtolnay/rust-toolchain@stable  # Better maintained action
+        with:
+          components: rust-src
 
-#     steps:
-#       - name: Checkout repository
-#         uses: actions/checkout@v2
+      - name: Cache cargo registry
+        uses: actions/cache@v3
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
 
-#       - name: Set up Rust
-#         uses: actions-rs/toolchain@v1
-#         with:
-#           toolchain: stable
-#           profile: minimal
-#           override: true
-#           default: true
+      - name: Install cargo-contract
+        run: |
+          # Check if already installed
+          if ! command -v cargo-contract &> /dev/null; then
+            cargo install cargo-contract --version "^3.2.0"
+          fi
 
-#       - name: Install cargo-contract
-#         run: |
-#           cargo install cargo-contract --version "^3.2.0" --force
+      - name: Install tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y jq b2sum
 
-#       - name: Install jq
-#         run: sudo apt-get install -y jq
+      - name: Get workspace members
+        id: get-members
+        run: |
+          members=$(cargo metadata --no-deps --format-version 1 | jq -r '.packages | map(select(.source == null)) | map(.name) | join(" ")')
+          echo "members=${members}" >> $GITHUB_OUTPUT
 
-#       - name: Get workspace members
-#         id: get-members
-#         run: |
-#           members=$(cargo metadata --no-deps --format-version 1 | jq -r '.packages | map(select(.source == null)) | map(.name) | .[]')
-#           echo "::set-output name=members::${members}"
-
-#       - name: Check contracts
-#         run: |
-#           members=${{ steps.get-members.outputs.members }}
-#           for member in $members; do
-#             if [[ "$member" != "chain-extension" ]]; then
-#               echo "Checking $member..."
-#               cargo contract check --manifest-path "$member/Cargo.toml"
-#             fi
-#           done
+      - name: Check contracts
+        run: |
+          set -e  # Exit on error
+          members="${{ steps.get-members.outputs.members }}"
+          for member in $members; do
+            if [[ "$member" != "chain-extension" ]] && [[ "$member" != "d9-chain-extension" ]]; then
+              echo "::group::Checking $member"
+              cargo contract check --manifest-path "$member/Cargo.toml"
+              echo "::endgroup::"
+            fi
+          done

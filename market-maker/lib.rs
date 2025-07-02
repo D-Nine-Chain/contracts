@@ -174,7 +174,7 @@ mod market_maker {
                 return Err(Error::CouldntTransferUSDTFromUser);
             }
 
-            let _ = self.mint_lp_tokens(caller, d9_liquidity, usdt_liquidity)?;
+            self.mint_lp_tokens(caller, d9_liquidity, usdt_liquidity)?;
 
             self.env().emit_event(LiquidityAdded {
                 account_id: caller,
@@ -522,7 +522,7 @@ mod market_maker {
             // Decimal scaling factor - difference between D9 (12 decimals) and USDT (2 decimals)
             let decimal_adjustment: u128 = 10_000_000_000; // 10^10
 
-            let (working_balance_1, result_scaling): =
+            let (working_balance_1, result_scaling) =
                 if direction == Direction(Currency::D9, Currency::USDT) {
                     // When converting D9 to USDT, scale up USDT for calculation, then scale down result
                     (

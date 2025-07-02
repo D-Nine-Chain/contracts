@@ -249,9 +249,9 @@ mod d9_merchant_mining {
             if usdt_amount < self.subscription_fee {
                 return Err(Error::InsufficientPayment);
             }
-            let _ = self.check_subscription_permissibility(merchant_id)?;
-            let _ = self.validate_usdt_transfer(merchant_id, usdt_amount)?;
-            let _ = self.receive_usdt_from_user(merchant_id, usdt_amount)?;
+            self.check_subscription_permissibility(merchant_id)?;
+            self.validate_usdt_transfer(merchant_id, usdt_amount)?;
+            self.receive_usdt_from_user(merchant_id, usdt_amount)?;
             let send_usdt_result = self.contract_sends_usdt_to(self.amm_contract, usdt_amount);
             if send_usdt_result.is_err() {
                 return Err(Error::SendingUSDTToAMM);
@@ -292,7 +292,115 @@ mod d9_merchant_mining {
             });
             Ok(new_expiry)
         }
+        // In merchant mining contract, add a new redemption function:
 
+        #[ink(message)]
+        pub fn redeem_d9_with_price_protection(
+            &mut self,
+            price_oracle: AccountId,
+        ) -> Result<Balance, Error> {
+            // Get account (same as regular redeem_d9)
+            let caller = self.env().caller();
+            let maybe_account = self.accounts.get(&caller);
+            if maybe_account.is_none() {
+                return Err(Error::NoAccountFound);
+            }
+            let mut account = maybe_account.unwrap();
+
+            // Calculate redeemable points (same logic)
+            if account.green_points == 0 {
+                return Err(Error::NothingToRedeem);
+            }
+            let redeemable_red_points = self.calc_total_redeemable_red_points(&account);
+            if redeemable_red_points == 0 {
+                return Err(Error::NothingToRedeem);
+            }
+
+            // Check 24hr lockout (same logic)
+            let is_within_24_hr_lockout = match account.last_conversion {
+                Some(last_conversion) => {
+                    let twenty_four_hours_prior =
+                        self.env().block_timestamp().saturating_sub(86_400_000);
+                    twenty_four_hours_prior < last_conversion
+                }
+                None => false,
+            };
+            if is_within_24_hr_lockout {
+                return Err(Error::NothingToRedeem);
+            }
+
+            // Call disburse with oracle
+            let disburse_result = self.disburse_d9_with_oracle(
+                caller,
+                &mut account,
+                redeemable_red_points,
+                price_oracle,
+            );
+            self.accounts.insert(caller, &account);
+            return disburse_result;
+        }
+
+        // New disburse function that uses oracle
+        fn disburse_d9_with_oracle(
+            &mut self,
+            recipient_id: AccountId,
+            account: &mut Account,
+            redeemable_red_points: Balance,
+            price_oracle: AccountId,
+        ) -> Result<Balance, Error> {
+            let redeemable_usdt = redeemable_red_points.saturating_div(100);
+
+            // Call mining pool with oracle
+            let d9_amount =
+                self.mining_pool_redeem_with_oracle(recipient_id, redeemable_usdt, price_oracle)?;
+
+            // Rest is same as original disburse_d9
+            account.redeemed_d9 = account.redeemed_d9.saturating_add(d9_amount);
+            account.relationship_factors = (0, 0);
+
+            // Process ancestors (same as before)
+            let last_redeem_timestamp = account.last_conversion.unwrap_or(account.created_at);
+            let time_based_red_points =
+                self.calc_red_points_from_time(account.green_points, last_redeem_timestamp);
+            if let Some(ancestors) = self.get_ancestors(recipient_id) {
+                let _ = self.update_ancestors_coefficients(&ancestors, time_based_red_points);
+            }
+
+            account.last_conversion = Some(self.env().block_timestamp());
+            account.green_points = account.green_points.saturating_sub(redeemable_red_points);
+
+            self.env().emit_event(D9Redeemed {
+                account_id: recipient_id,
+                redeemed_d9: d9_amount,
+            });
+
+            Ok(d9_amount)
+        }
+
+        // Helper function to call mining pool with oracle
+        fn mining_pool_redeem_with_oracle(
+            &self,
+            user_account: AccountId,
+            redeemable_usdt: Balance,
+            price_oracle: AccountId,
+        ) -> Result<Balance, Error> {
+            let result = build_call::<D9Environment>()
+                .call(self.mining_pool)
+                .gas_limit(0)
+                .exec_input(
+                    ExecutionInput::new(Selector::new(selector_bytes!(
+                        "merchant_user_redeem_d9_with_oracle"
+                    )))
+                    .push_arg(user_account)
+                    .push_arg(redeemable_usdt)
+                    .push_arg(price_oracle),
+                )
+                .returns::<Result<Balance, Error>>()
+                .try_invoke()?;
+            result.unwrap()
+        }
+
+        // Keep original redeem_d9() function unchanged for backward compatibility
         ///withdraw a certain amount of d9 that has been converted into red points
         #[ink(message)]
         pub fn redeem_d9(&mut self) -> Result<Balance, Error> {
@@ -495,9 +603,9 @@ mod d9_merchant_mining {
             usdt_amount: Balance,
         ) -> Result<GreenPointsResult, Error> {
             let consumer_id = self.env().caller();
-            let _ = self.validate_merchant(merchant_id)?;
-            let _ = self.validate_usdt_transfer(consumer_id, usdt_amount)?;
-            let _ = self.receive_usdt_from_user(consumer_id, usdt_amount);
+            self.validate_merchant(merchant_id)?;
+            self.validate_usdt_transfer(consumer_id, usdt_amount)?;
+            self.receive_usdt_from_user(consumer_id, usdt_amount)?;
             self.env().emit_event(USDTMerchantPaymentSent {
                 merchant: merchant_id,
                 consumer: consumer_id,
@@ -576,7 +684,7 @@ mod d9_merchant_mining {
             let d9_amount = conversion_result.unwrap();
 
             //send to mining pool
-            let _ = self.call_mining_pool_to_process(merchant_id, d9_amount)?;
+            self.call_mining_pool_to_process(merchant_id, d9_amount)?;
 
             // self.credit_pool(d9_amount);
             self.env().emit_event(GreenPointsTransaction {

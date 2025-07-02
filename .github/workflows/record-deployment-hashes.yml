@@ -1,0 +1,111 @@
+name: Record Deployment Hashes
+on:
+  push:
+    branches: [ main ]
+
+jobs:
+  record-hashes:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    
+    steps:
+      - uses: actions/checkout@v3
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          fetch-depth: 2  # Need previous commit
+          
+      - name: Set up Rust
+        uses: dtolnay/rust-toolchain@stable
+        
+      - name: Install tools
+        run: |
+          cargo install cargo-contract --version 3.2.0
+          sudo apt-get update && sudo apt-get install -y jq python3
+      
+      - name: Detect changed contracts
+        id: changes
+        run: |
+          # Get changed files between previous commit and current
+          CHANGED_FILES=$(git diff --name-only HEAD^ HEAD)
+          
+          # Find all contract directories that had changes
+          CHANGED_CONTRACTS=""
+          for file in $CHANGED_FILES; do
+            DIR=$(dirname "$file")
+            while [[ "$DIR" != "." && "$DIR" != "/" ]]; do
+              if [[ -f "$DIR/Cargo.toml" ]] && grep -q "ink.*=" "$DIR/Cargo.toml" 2>/dev/null; then
+                CONTRACT_NAME=$(basename "$DIR")
+                # Skip chain-extension or any non-contract directories
+                if [[ "$CONTRACT_NAME" != "chain-extension" ]] && [[ "$CONTRACT_NAME" != "d9-chain-extension" ]]; then
+                  if [[ ! " $CHANGED_CONTRACTS " =~ " $CONTRACT_NAME " ]]; then
+                    CHANGED_CONTRACTS="$CHANGED_CONTRACTS $CONTRACT_NAME"
+                  fi
+                fi
+                break
+              fi
+              DIR=$(dirname "$DIR")
+            done
+          done
+          
+          echo "contracts=$CHANGED_CONTRACTS" >> $GITHUB_OUTPUT
+          echo "Changed contracts: $CHANGED_CONTRACTS"
+          
+      - name: Build and record hashes
+        if: steps.changes.outputs.contracts != ''
+        run: |
+          # Initialize or load approvals file
+          if [ -f .github/deployment-hashes.json ]; then
+            cp .github/deployment-hashes.json hashes.json
+          else
+            echo '{}' > hashes.json
+          fi
+          
+          # Build each changed contract
+          for contract in ${{ steps.changes.outputs.contracts }}; do
+            echo "Building $contract..."
+            cd $contract
+            cargo contract build --release
+            
+            # Calculate hash using Python one-liner
+            HASH=$(python3 -c "import hashlib; print(hashlib.blake2b(open('target/ink/${contract}.wasm', 'rb').read(), digest_size=32).hexdigest())")
+            
+            cd ..
+            
+            # Update hashes file
+            jq --arg contract "$contract" --arg hash "$HASH" \
+              --arg date "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+              --arg commit "${{ github.sha }}" \
+              '.[$contract] = {
+                "code_hash": $hash,
+                "commit": $commit,
+                "approved_at": $date,
+                "approved_by": "GitHub Actions"
+              }' hashes.json > tmp.json
+            mv tmp.json hashes.json
+          done
+          
+          mkdir -p .github
+          mv hashes.json .github/deployment-hashes.json
+      
+      - name: Commit deployment hashes
+        if: steps.changes.outputs.contracts != ''
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add .github/deployment-hashes.json
+          git commit -m "Record deployment hashes for: ${{ steps.changes.outputs.contracts }}" || exit 0
+          git push
+      
+      - name: Create deployment summary
+        if: steps.changes.outputs.contracts != ''
+        run: |
+          echo "## 🚀 Deployment Hashes Recorded" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "The following contracts have been built and their hashes recorded:" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          
+          cat .github/deployment-hashes.json | jq -r '
+            to_entries[] | 
+            "### \(.key)\n- **Hash**: `\(.value.code_hash)`\n- **Commit**: `\(.value.commit[0:7])`\n- **Date**: \(.value.approved_at)\n"
+          ' >> $GITHUB_STEP_SUMMARY

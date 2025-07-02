@@ -106,7 +106,9 @@ mod mining_pool {
         #[ink(message)]
         pub fn get_price_protection_info(&self) -> (Balance, Balance) {
             let highest = self.get_highest_price();
-            let min_protected = highest.saturating_mul(Self::PERCENT_PROTECT).saturating_div(100);
+            let min_protected = highest
+                .saturating_mul(Self::PERCENT_PROTECT)
+                .saturating_div(100);
             (highest, min_protected)
         }
 
@@ -205,8 +207,10 @@ mod mining_pool {
                 self.set_highest_price(highest_rate);
             }
 
-            // Calculate minimum acceptable rate (90% of highest)
-            let min_acceptable_rate = highest_rate.saturating_mul(Self::PERCENT_PROTECT).saturating_div(100);
+            // Calculate minimum acceptable rate (70% of highest)
+            let min_acceptable_rate = highest_rate
+                .saturating_mul(Self::PERCENT_PROTECT)
+                .saturating_div(100);
 
             // Use the better rate
             let effective_rate = if current_rate >= min_acceptable_rate {
@@ -366,8 +370,8 @@ mod mining_pool {
     mod tests {
         /// Imports all the definitions from the outer scope so we can use them here.
         use super::*;
-        use ink::env::{test, DefaultEnvironment};
         use ink::env::test::DefaultAccounts;
+        use ink::env::{test, DefaultEnvironment};
 
         // Test helper functions
         fn default_accounts() -> DefaultAccounts<DefaultEnvironment> {
@@ -427,9 +431,9 @@ mod mining_pool {
         fn test_constructor_initializes_correctly() {
             let accounts = default_accounts();
             set_caller(accounts.alice);
-            
+
             let pool = create_default_mining_pool();
-            
+
             assert_eq!(pool.admin, accounts.alice);
             assert_eq!(pool.main_contract, mock_main_contract());
             assert_eq!(pool.merchant_contract, mock_merchant_contract());
@@ -444,9 +448,9 @@ mod mining_pool {
         #[ink::test]
         fn test_get_accumulative_reward_pool() {
             let mut pool = create_default_mining_pool();
-            
+
             assert_eq!(pool.get_accumulative_reward_pool(), 0);
-            
+
             pool.accumulative_reward_pool = 1000;
             assert_eq!(pool.get_accumulative_reward_pool(), 1000);
         }
@@ -454,9 +458,9 @@ mod mining_pool {
         #[ink::test]
         fn test_get_merchant_volume() {
             let mut pool = create_default_mining_pool();
-            
+
             assert_eq!(pool.get_merchant_volume(), 0);
-            
+
             pool.merchant_volume = 5000;
             assert_eq!(pool.get_merchant_volume(), 5000);
         }
@@ -464,14 +468,14 @@ mod mining_pool {
         #[ink::test]
         fn test_get_session_volume() {
             let mut pool = create_default_mining_pool();
-            
+
             // Non-existing session should return 0
             assert_eq!(pool.get_session_volume(1), 0);
-            
+
             // Add volume for session 1
             pool.volume_at_index.insert(1, &1000);
             assert_eq!(pool.get_session_volume(1), 1000);
-            
+
             // Add volume for session 2
             pool.volume_at_index.insert(2, &2500);
             assert_eq!(pool.get_session_volume(2), 2500);
@@ -480,18 +484,18 @@ mod mining_pool {
         #[ink::test]
         fn test_get_price_protection_info() {
             let mut pool = create_default_mining_pool();
-            
+
             // Initially should return (0, 0)
             let (highest, min_protected) = pool.get_price_protection_info();
             assert_eq!(highest, 0);
             assert_eq!(min_protected, 0);
-            
+
             // Set highest price
             pool.set_highest_price(1000);
             let (highest, min_protected) = pool.get_price_protection_info();
             assert_eq!(highest, 1000);
             assert_eq!(min_protected, 700); // 70% of 1000
-            
+
             // Test with larger value
             pool.set_highest_price(10000);
             let (highest, min_protected) = pool.get_price_protection_info();
@@ -503,14 +507,14 @@ mod mining_pool {
         #[ink::test]
         fn test_price_storage_and_retrieval() {
             let mut pool = create_default_mining_pool();
-            
+
             // Initially should be 0
             assert_eq!(pool.get_highest_price(), 0);
-            
+
             // Set and retrieve price
             pool.set_highest_price(1500);
             assert_eq!(pool.get_highest_price(), 1500);
-            
+
             // Update price
             pool.set_highest_price(2000);
             assert_eq!(pool.get_highest_price(), 2000);
@@ -519,24 +523,24 @@ mod mining_pool {
         #[ink::test]
         fn test_get_previous_valid_session_index() {
             let mut pool = create_default_mining_pool();
-            
+
             // With no sessions, should return 0
             assert_eq!(pool.get_previous_valid_session_index(5), 0);
-            
+
             // Add some sessions
             pool.volume_at_index.insert(1, &100);
             pool.volume_at_index.insert(3, &300);
             pool.volume_at_index.insert(5, &500);
-            
+
             // Previous of 5 should be 3
             assert_eq!(pool.get_previous_valid_session_index(5), 3);
-            
+
             // Previous of 3 should be 1
             assert_eq!(pool.get_previous_valid_session_index(3), 1);
-            
+
             // Previous of 2 should be 1
             assert_eq!(pool.get_previous_valid_session_index(2), 1);
-            
+
             // Previous of 1 should be 0
             assert_eq!(pool.get_previous_valid_session_index(1), 0);
         }
@@ -544,17 +548,17 @@ mod mining_pool {
         #[ink::test]
         fn test_calc_votes_from_d9() {
             let pool = create_default_mining_pool();
-            
+
             // 1 D9 = 1 vote
             let one_d9: Balance = 1_000_000_000_000;
             assert_eq!(pool.calc_votes_from_d9(one_d9), 1);
-            
+
             // 10 D9 = 10 votes
             assert_eq!(pool.calc_votes_from_d9(one_d9 * 10), 10);
-            
+
             // 0.5 D9 = 0 votes (truncated)
             assert_eq!(pool.calc_votes_from_d9(one_d9 / 2), 0);
-            
+
             // 1.9 D9 = 1 vote (truncated)
             assert_eq!(pool.calc_votes_from_d9(one_d9 * 19 / 10), 1);
         }
@@ -562,21 +566,21 @@ mod mining_pool {
         #[ink::test]
         fn test_calculate_session_delta() {
             let mut pool = create_default_mining_pool();
-            
+
             // First session should have delta equal to total volume
             let delta = pool.calculate_session_delta(1, 1000).unwrap();
             assert_eq!(delta, 1000);
-            
+
             // Add volume for session 1
             pool.volume_at_index.insert(1, &1000);
-            
+
             // Session 2 with volume 1500 should have delta of 500
             let delta = pool.calculate_session_delta(2, 1500).unwrap();
             assert_eq!(delta, 500);
-            
+
             // Add volume for session 2
             pool.volume_at_index.insert(2, &1500);
-            
+
             // Session 3 with same volume should have delta of 0
             let delta = pool.calculate_session_delta(3, 1500).unwrap();
             assert_eq!(delta, 0);
@@ -587,11 +591,11 @@ mod mining_pool {
         fn test_only_callable_by() {
             let accounts = default_accounts();
             let pool = create_default_mining_pool();
-            
+
             // Should succeed when caller matches
             set_caller(accounts.alice);
             assert!(pool.only_callable_by(accounts.alice).is_ok());
-            
+
             // Should fail when caller doesn't match
             set_caller(accounts.bob);
             match pool.only_callable_by(accounts.alice) {
@@ -614,11 +618,11 @@ mod mining_pool {
                 mock_amm_contract(),
             );
             let new_merchant = AccountId::from([0x05; 32]);
-            
+
             // Should fail if not admin
             set_caller(accounts.bob);
             assert!(pool.change_merchant_contract(new_merchant).is_err());
-            
+
             // Should succeed if admin
             set_caller(accounts.alice);
             assert!(pool.change_merchant_contract(new_merchant).is_ok());
@@ -636,11 +640,11 @@ mod mining_pool {
                 mock_amm_contract(),
             );
             let new_node_reward = AccountId::from([0x06; 32]);
-            
+
             // Should fail if not admin
             set_caller(accounts.bob);
             assert!(pool.change_node_reward_contract(new_node_reward).is_err());
-            
+
             // Should succeed if admin
             set_caller(accounts.alice);
             assert!(pool.change_node_reward_contract(new_node_reward).is_ok());
@@ -658,11 +662,11 @@ mod mining_pool {
                 mock_amm_contract(),
             );
             let new_amm = AccountId::from([0x07; 32]);
-            
+
             // Should fail if not admin
             set_caller(accounts.bob);
             assert!(pool.change_amm_contract(new_amm).is_err());
-            
+
             // Should succeed if admin
             set_caller(accounts.alice);
             assert!(pool.change_amm_contract(new_amm).is_ok());
@@ -680,11 +684,11 @@ mod mining_pool {
                 mock_amm_contract(),
             );
             let new_main = AccountId::from([0x08; 32]);
-            
+
             // Should fail if not admin
             set_caller(accounts.bob);
             assert!(pool.change_main_contract(new_main).is_err());
-            
+
             // Should succeed if admin
             set_caller(accounts.alice);
             assert!(pool.change_main_contract(new_main).is_ok());
@@ -701,20 +705,20 @@ mod mining_pool {
                 mock_node_reward_contract(),
                 mock_amm_contract(),
             );
-            
+
             // Set up contract balance
             let contract_addr = test::callee::<DefaultEnvironment>();
             set_account_balance(contract_addr, 10000);
-            
+
             // Should fail if not admin
             set_caller(accounts.bob);
             assert!(pool.send_to(accounts.charlie, 1000).is_err());
-            
+
             // Should succeed if admin
             set_caller(accounts.alice);
             let _initial_balance = get_account_balance(accounts.charlie);
             assert!(pool.send_to(accounts.charlie, 1000).is_ok());
-            
+
             // Note: In unit tests, transfers don't actually move funds
             // In a real environment, we would check that charlie's balance increased
         }
@@ -724,16 +728,16 @@ mod mining_pool {
         fn test_deduct_from_reward_pool() {
             let mut pool = create_default_mining_pool();
             pool.accumulative_reward_pool = 5000;
-            
+
             // Should fail if not node reward contract
             set_caller(mock_merchant_contract());
             assert!(pool.deduct_from_reward_pool(1000).is_err());
-            
+
             // Should succeed if node reward contract
             set_caller(mock_node_reward_contract());
             assert!(pool.deduct_from_reward_pool(1000).is_ok());
             assert_eq!(pool.accumulative_reward_pool, 4000);
-            
+
             // Test underflow protection
             assert!(pool.deduct_from_reward_pool(5000).is_ok());
             assert_eq!(pool.accumulative_reward_pool, 0); // Should saturate at 0
@@ -744,15 +748,15 @@ mod mining_pool {
             let accounts = default_accounts();
             let mut pool = create_default_mining_pool();
             pool.accumulative_reward_pool = 5000;
-            
+
             // Set up contract balance
             let contract_addr = test::callee::<DefaultEnvironment>();
             set_account_balance(contract_addr, 10000);
-            
+
             // Should fail if not node reward contract
             set_caller(mock_merchant_contract());
             assert!(pool.pay_node_reward(accounts.bob, 1000).is_err());
-            
+
             // Should succeed if node reward contract
             set_caller(mock_node_reward_contract());
             assert!(pool.pay_node_reward(accounts.bob, 1000).is_ok());
@@ -766,7 +770,7 @@ mod mining_pool {
         #[ink::test]
         fn test_update_pool_and_retrieve_access_control() {
             let mut pool = create_default_mining_pool();
-            
+
             // Should fail if not node reward contract
             set_caller(mock_merchant_contract());
             assert!(pool.update_pool_and_retrieve(1).is_err());
@@ -779,7 +783,7 @@ mod mining_pool {
         fn test_process_merchant_payment_access_control() {
             let accounts = default_accounts();
             let mut pool = create_default_mining_pool();
-            
+
             // Should fail if not merchant contract
             set_caller(accounts.alice);
             set_value_transferred(1000);
@@ -793,7 +797,7 @@ mod mining_pool {
         fn test_merchant_user_redeem_d9_access_control() {
             let accounts = default_accounts();
             let mut pool = create_default_mining_pool();
-            
+
             // Should fail if not merchant contract
             set_caller(accounts.alice);
             assert!(pool.merchant_user_redeem_d9(accounts.bob, 100).is_err());
@@ -803,11 +807,11 @@ mod mining_pool {
         fn test_merchant_user_redeem_d9_zero_amount() {
             let accounts = default_accounts();
             let mut pool = create_default_mining_pool();
-            
+
             // Should fail with zero amount
             set_caller(mock_merchant_contract());
             match pool.merchant_user_redeem_d9(accounts.bob, 0) {
-                Err(Error::RedeemableUSDTZero) => {},
+                Err(Error::RedeemableUSDTZero) => {}
                 _ => panic!("Expected RedeemableUSDTZero error"),
             }
         }
@@ -818,15 +822,15 @@ mod mining_pool {
         #[ink::test]
         fn test_arithmetic_overflow_protection() {
             let mut pool = create_default_mining_pool();
-            
+
             // Test merchant volume overflow protection
             pool.merchant_volume = Balance::MAX - 100;
             set_caller(mock_merchant_contract());
             set_value_transferred(200);
-            
+
             // This should use saturating_add and not panic
             // Note: This test would need chain extension mocking to fully execute
-            
+
             // Test accumulative reward pool overflow
             pool.accumulative_reward_pool = Balance::MAX - 100;
             let result = pool.accumulative_reward_pool.saturating_add(200);
@@ -836,10 +840,10 @@ mod mining_pool {
         #[ink::test]
         fn test_session_edge_cases() {
             let mut pool = create_default_mining_pool();
-            
+
             // Test with session 0
             assert_eq!(pool.get_previous_valid_session_index(0), 0);
-            
+
             // Test with large session numbers
             pool.volume_at_index.insert(u32::MAX - 1, &1000);
             assert_eq!(pool.get_session_volume(u32::MAX - 1), 1000);
@@ -857,18 +861,18 @@ mod mining_pool {
         #[ink::test]
         fn test_session_progression_scenario() {
             let mut pool = create_default_mining_pool();
-            
+
             // Simulate multiple sessions
             pool.volume_at_index.insert(1, &1000);
             pool.volume_at_index.insert(2, &2000);
             pool.volume_at_index.insert(3, &3500);
-            
+
             // Test delta calculations
             assert_eq!(pool.calculate_session_delta(4, 5000).unwrap(), 1500);
-            
+
             // Add volume for session 4
             pool.volume_at_index.insert(4, &5000);
-            
+
             // Session 5 with same volume should have delta of 0
             assert_eq!(pool.calculate_session_delta(5, 5000).unwrap(), 0);
         }
@@ -876,10 +880,10 @@ mod mining_pool {
         #[ink::test]
         fn test_price_protection_scenario() {
             let mut pool = create_default_mining_pool();
-            
+
             // Simulate price history
             pool.set_highest_price(2_000_000); // 2 D9/USDT with precision
-            
+
             // Current rate calculation would use 70% protection
             let (highest, protected) = pool.get_price_protection_info();
             assert_eq!(highest, 2_000_000);

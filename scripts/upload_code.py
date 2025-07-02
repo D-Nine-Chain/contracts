@@ -195,12 +195,8 @@ class ContractDeployer:
         
         contract_address = None
         if not upload_only:
-            # Instantiate contract
-            contract_address = self.instantiate_contract(
-                contract, network, suri, constructor, args
-            )
-            if not contract_address:
-                sys.exit(1)
+            print("❌ Contract instantiation not supported. Use --upload-only flag.")
+            sys.exit(1)
         
         # Record deployment
         self.record_deployment(

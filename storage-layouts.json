@@ -32,7 +32,7 @@
     },
     {
       "name": "volume_at_index",
-      "field_type": "Mapping<u32",
+      "field_type": "Mapping<u32, Balance>",
       "position": 6
     },
     {

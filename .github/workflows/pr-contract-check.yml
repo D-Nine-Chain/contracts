@@ -38,9 +38,13 @@ jobs:
                   break
                 fi
                 
-                # Avoid duplicates
+                # Avoid duplicates and build space-separated list
                 if [[ ! " $CONTRACTS " =~ " $CONTRACT_NAME " ]]; then
-                  CONTRACTS="$CONTRACTS $CONTRACT_NAME"
+                  if [[ -z "$CONTRACTS" ]]; then
+                    CONTRACTS="$CONTRACT_NAME"
+                  else
+                    CONTRACTS="$CONTRACTS $CONTRACT_NAME"
+                  fi
                 fi
                 break
               fi

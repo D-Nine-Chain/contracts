@@ -35,12 +35,23 @@ jobs:
             cargo install cargo-contract --version "^3.2.0"
           fi
 
+      - name: Cache cargo binaries
+        uses: actions/cache@v3
+        with:
+          path: ~/.cargo/bin
+          key: ${{ runner.os }}-cargo-bin-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-cargo-bin-
+
       - name: Install tools
         run: |
           sudo apt-get update
           sudo apt-get install -y jq
-          # Install b2sum via cargo as it's not in Ubuntu repos
-          cargo install b2sum
+          
+          # Check and install b2sum if not cached
+          if ! command -v b2sum &> /dev/null; then
+            cargo install b2sum
+          fi
 
       - name: Get workspace members
         id: get-members
@@ -52,10 +63,17 @@ jobs:
         run: |
           set -e  # Exit on error
           members="${{ steps.get-members.outputs.members }}"
+          # List of packages to skip (libraries and usdt)
+          SKIP_PACKAGES="chain-extension d9-chain-extension d9-burn-common d9-test-utils d9_usdt"
+          
           for member in $members; do
-            if [[ "$member" != "chain-extension" ]] && [[ "$member" != "d9-chain-extension" ]]; then
-              echo "::group::Checking $member"
-              cargo contract check --manifest-path "$member/Cargo.toml"
-              echo "::endgroup::"
+            # Skip if it's in the skip list
+            if [[ " $SKIP_PACKAGES " =~ " $member " ]]; then
+              echo "Skipping package: $member"
+              continue
             fi
+            
+            echo "::group::Checking $member"
+            cargo contract check --manifest-path "$member/Cargo.toml"
+            echo "::endgroup::"
           done

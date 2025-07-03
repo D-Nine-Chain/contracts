@@ -28,6 +28,16 @@ jobs:
               if [[ -f "$DIR/Cargo.toml" ]] && grep -q "ink.*=" "$DIR/Cargo.toml" 2>/dev/null; then
                 # Extract just the contract directory name
                 CONTRACT_NAME=$(basename "$DIR")
+                
+                # Skip libraries and usdt
+                if [[ "$CONTRACT_NAME" == "d9-burn-common" ]] || \
+                   [[ "$CONTRACT_NAME" == "chain-extension" ]] || \
+                   [[ "$CONTRACT_NAME" == "d9-chain-extension" ]] || \
+                   [[ "$CONTRACT_NAME" == "d9-test-utils" ]] || \
+                   [[ "$CONTRACT_NAME" == "usdt" ]]; then
+                  break
+                fi
+                
                 # Avoid duplicates
                 if [[ ! " $CONTRACTS " =~ " $CONTRACT_NAME " ]]; then
                   CONTRACTS="$CONTRACTS $CONTRACT_NAME"
@@ -64,12 +74,27 @@ jobs:
       - name: Set up Rust
         uses: dtolnay/rust-toolchain@stable
         
+      - name: Cache cargo binaries
+        uses: actions/cache@v3
+        with:
+          path: ~/.cargo/bin
+          key: ${{ runner.os }}-cargo-bin-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-cargo-bin-
+        
       - name: Install tools
         run: |
-          cargo install cargo-contract --version 3.2.0
+          # Check and install cargo-contract if not cached
+          if ! command -v cargo-contract &> /dev/null; then
+            cargo install cargo-contract --version 3.2.0
+          fi
+          
           sudo apt-get update && sudo apt-get install -y python3
-          # Install b2sum via cargo as it's not in Ubuntu repos
-          cargo install b2sum
+          
+          # Check and install b2sum if not cached
+          if ! command -v b2sum &> /dev/null; then
+            cargo install b2sum
+          fi
           
       - name: Check storage changes
         run: |

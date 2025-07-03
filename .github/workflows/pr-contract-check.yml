@@ -50,7 +50,8 @@ jobs:
           
           # Convert to JSON array for matrix
           if [[ -n "$CONTRACTS" ]]; then
-            JSON_ARRAY=$(echo "$CONTRACTS" | xargs -n1 | jq -R . | jq -s .)
+            # Convert space-separated list to JSON array more safely
+            JSON_ARRAY=$(echo "$CONTRACTS" | tr ' ' '\n' | grep -v '^$' | jq -R . | jq -s .)
             echo "contracts=$JSON_ARRAY" >> $GITHUB_OUTPUT
             echo "Found changed contracts: $CONTRACTS"
           else

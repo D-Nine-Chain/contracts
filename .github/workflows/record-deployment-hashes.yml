@@ -18,9 +18,20 @@ jobs:
       - name: Set up Rust
         uses: dtolnay/rust-toolchain@stable
         
+      - name: Cache cargo binaries
+        uses: actions/cache@v3
+        with:
+          path: ~/.cargo/bin
+          key: ${{ runner.os }}-cargo-bin-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-cargo-bin-
+        
       - name: Install tools
         run: |
-          cargo install cargo-contract --version 3.2.0
+          # Check and install cargo-contract if not cached
+          if ! command -v cargo-contract &> /dev/null; then
+            cargo install cargo-contract --version 3.2.0
+          fi
           sudo apt-get update && sudo apt-get install -y jq python3
       
       - name: Detect changed contracts
@@ -36,8 +47,9 @@ jobs:
             while [[ "$DIR" != "." && "$DIR" != "/" ]]; do
               if [[ -f "$DIR/Cargo.toml" ]] && grep -q "ink.*=" "$DIR/Cargo.toml" 2>/dev/null; then
                 CONTRACT_NAME=$(basename "$DIR")
-                # Skip chain-extension or any non-contract directories
-                if [[ "$CONTRACT_NAME" != "chain-extension" ]] && [[ "$CONTRACT_NAME" != "d9-chain-extension" ]]; then
+                # Skip libraries and usdt
+                SKIP_PACKAGES="chain-extension d9-chain-extension d9-burn-common d9-test-utils usdt"
+                if [[ ! " $SKIP_PACKAGES " =~ " $CONTRACT_NAME " ]]; then
                   if [[ ! " $CHANGED_CONTRACTS " =~ " $CONTRACT_NAME " ]]; then
                     CHANGED_CONTRACTS="$CHANGED_CONTRACTS $CONTRACT_NAME"
                   fi
@@ -64,11 +76,25 @@ jobs:
           # Build each changed contract
           for contract in ${{ steps.changes.outputs.contracts }}; do
             echo "Building $contract..."
-            cd $contract
+            # Find the actual directory for the contract
+            CONTRACT_DIR=$(find . -name "Cargo.toml" -type f | xargs grep -l "name = \".*$contract" | head -1 | xargs dirname)
+            if [[ -z "$CONTRACT_DIR" ]]; then
+              echo "Warning: Could not find directory for contract $contract"
+              continue
+            fi
+            cd "$CONTRACT_DIR"
             cargo contract build --release
             
+            # Find the actual wasm file (might have different name than directory)
+            WASM_FILE=$(find target/ink -name "*.wasm" -type f | head -1)
+            if [[ -z "$WASM_FILE" ]]; then
+              echo "Warning: No wasm file found for $contract"
+              cd ..
+              continue
+            fi
+            
             # Calculate hash using Python one-liner
-            HASH=$(python3 -c "import hashlib; print(hashlib.blake2b(open('target/ink/${contract}.wasm', 'rb').read(), digest_size=32).hexdigest())")
+            HASH=$(python3 -c "import hashlib; print(hashlib.blake2b(open('$WASM_FILE', 'rb').read(), digest_size=32).hexdigest())")
             
             cd ..
             

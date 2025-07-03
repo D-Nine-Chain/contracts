@@ -56,24 +56,29 @@ jobs:
       - name: Get workspace members
         id: get-members
         run: |
-          members=$(cargo metadata --no-deps --format-version 1 | jq -r '.packages | map(select(.source == null)) | map(.name) | join(" ")')
-          echo "members=${members}" >> $GITHUB_OUTPUT
+          # Get package info as JSON array with name and manifest path
+          packages=$(cargo metadata --no-deps --format-version 1 | jq -c '.packages | map(select(.source == null)) | map({name: .name, manifest_path: .manifest_path})')
+          echo "packages=${packages}" >> $GITHUB_OUTPUT
 
       - name: Check contracts
         run: |
           set -e  # Exit on error
-          members="${{ steps.get-members.outputs.members }}"
+          packages='${{ steps.get-members.outputs.packages }}'
           # List of packages to skip (libraries and usdt)
           SKIP_PACKAGES="chain-extension d9-chain-extension d9-burn-common d9-test-utils d9_usdt"
           
-          for member in $members; do
+          # Parse JSON and iterate
+          echo "$packages" | jq -c '.[]' | while read -r package; do
+            name=$(echo "$package" | jq -r '.name')
+            manifest_path=$(echo "$package" | jq -r '.manifest_path')
+            
             # Skip if it's in the skip list
-            if [[ " $SKIP_PACKAGES " =~ " $member " ]]; then
-              echo "Skipping package: $member"
+            if [[ " $SKIP_PACKAGES " =~ " $name " ]]; then
+              echo "Skipping package: $name"
               continue
             fi
             
-            echo "::group::Checking $member"
-            cargo contract check --manifest-path "$member/Cargo.toml"
+            echo "::group::Checking $name"
+            cargo contract check --manifest-path "$manifest_path"
             echo "::endgroup::"
           done

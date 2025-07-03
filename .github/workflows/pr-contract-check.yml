@@ -91,8 +91,12 @@ jobs:
         id: codehash
         working-directory: ${{ matrix.contract }}
         run: |
-          # Use b2sum (blake2) to calculate hash
-          HASH=$(b2sum -l 256 target/ink/*.wasm | cut -d' ' -f1)
+          # Calculate hash - try b2sum first, fallback to sha256sum
+          if command -v b2sum &> /dev/null; then
+            HASH=$(b2sum -l 256 target/ink/*.wasm | cut -d' ' -f1)
+          else
+            HASH=$(sha256sum target/ink/*.wasm | cut -d' ' -f1)
+          fi
           echo "hash=$HASH" >> $GITHUB_OUTPUT
           echo "Contract: ${{ matrix.contract }}"
           echo "Code Hash: $HASH"

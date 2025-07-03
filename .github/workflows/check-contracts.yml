@@ -38,7 +38,9 @@ jobs:
       - name: Install tools
         run: |
           sudo apt-get update
-          sudo apt-get install -y jq b2sum
+          sudo apt-get install -y jq
+          # Install b2sum via cargo as it's not in Ubuntu repos
+          cargo install b2sum
 
       - name: Get workspace members
         id: get-members

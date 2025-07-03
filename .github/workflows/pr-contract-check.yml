@@ -67,7 +67,9 @@ jobs:
       - name: Install tools
         run: |
           cargo install cargo-contract --version 3.2.0
-          sudo apt-get update && sudo apt-get install -y b2sum python3
+          sudo apt-get update && sudo apt-get install -y python3
+          # Install b2sum via cargo as it's not in Ubuntu repos
+          cargo install b2sum
           
       - name: Check storage changes
         run: |

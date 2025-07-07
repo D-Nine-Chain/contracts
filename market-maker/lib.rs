@@ -1,5 +1,5 @@
 #![cfg_attr(not(feature = "std"), no_std, no_main)]
-pub use d9_chain_extension::D9Environment;
+pub use chain_extension::D9Environment;
 #[ink::contract(env = D9Environment)]
 mod market_maker {
     use super::*;

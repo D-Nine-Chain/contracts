@@ -1,0 +1,8 @@
+/Volumes/sink/projects/d9/contracts/d9-contracts/rewards-aggregator-v2/target/ink/rewards_aggregator_router/release/deps/libimpl_trait_for_tuples-e0b8cc3364ad6476.dylib: /Users/yvan/.cargo/registry/src/index.crates.io-6f17d22bba15001f/impl-trait-for-tuples-0.2.3/src/lib.rs /Users/yvan/.cargo/registry/src/index.crates.io-6f17d22bba15001f/impl-trait-for-tuples-0.2.3/src/full_automatic.rs /Users/yvan/.cargo/registry/src/index.crates.io-6f17d22bba15001f/impl-trait-for-tuples-0.2.3/src/semi_automatic.rs /Users/yvan/.cargo/registry/src/index.crates.io-6f17d22bba15001f/impl-trait-for-tuples-0.2.3/src/utils.rs
+
+/Volumes/sink/projects/d9/contracts/d9-contracts/rewards-aggregator-v2/target/ink/rewards_aggregator_router/release/deps/impl_trait_for_tuples-e0b8cc3364ad6476.d: /Users/yvan/.cargo/registry/src/index.crates.io-6f17d22bba15001f/impl-trait-for-tuples-0.2.3/src/lib.rs /Users/yvan/.cargo/registry/src/index.crates.io-6f17d22bba15001f/impl-trait-for-tuples-0.2.3/src/full_automatic.rs /Users/yvan/.cargo/registry/src/index.crates.io-6f17d22bba15001f/impl-trait-for-tuples-0.2.3/src/semi_automatic.rs /Users/yvan/.cargo/registry/src/index.crates.io-6f17d22bba15001f/impl-trait-for-tuples-0.2.3/src/utils.rs
+
+/Users/yvan/.cargo/registry/src/index.crates.io-6f17d22bba15001f/impl-trait-for-tuples-0.2.3/src/lib.rs:
+/Users/yvan/.cargo/registry/src/index.crates.io-6f17d22bba15001f/impl-trait-for-tuples-0.2.3/src/full_automatic.rs:
+/Users/yvan/.cargo/registry/src/index.crates.io-6f17d22bba15001f/impl-trait-for-tuples-0.2.3/src/semi_automatic.rs:
+/Users/yvan/.cargo/registry/src/index.crates.io-6f17d22bba15001f/impl-trait-for-tuples-0.2.3/src/utils.rs:

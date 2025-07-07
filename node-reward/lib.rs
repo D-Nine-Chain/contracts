@@ -2,7 +2,7 @@
 /// calculate the share of session reward that is due to a particular node
 /// session rewards are calculated as 10 percent of the accumulation of total burned tokens in the main pool
 /// and total of d9 tokens processed by the merchant contract
-pub use d9_chain_extension::D9Environment;
+pub use chain_extension::D9Environment;
 #[ink::contract(env = D9Environment)]
 mod node_reward {
     use super::*;

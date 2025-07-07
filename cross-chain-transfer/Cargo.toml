@@ -1,25 +1,21 @@
 [package]
-name = "cross_chain_transfer"
+name = "cross-chain-transfer"
 version = "1.0.0"
-authors = ["D9 team tech@d9network.com"]
+authors = ["D9"]
 edition = "2021"
 
 [dependencies]
-ink = { version = "4.2.0", default-features = false }
-d9-chain-extension = { version = "^1.0.0", path = "../chain-extension", default-features = false }
+ink.workspace = true
+chain-extension = { version = "^1.0.0", path = "../d9-core/chain-extension", default-features = false }
 bs58 = { version = "0.5.0", default-features = false, optional = true }
-scale = { package = "parity-scale-codec", version = "3", default-features = false, features = [
-    "derive",
-] }
+scale.workspace = true
 
-scale-info = { version = "2.6", default-features = false, features = [
-    "derive",
-], optional = true }
+scale-info = { workspace = true, optional = true }
 hex = { version = "0.4.3", default-features = false, features = ["alloc"] }
 
 [dev-dependencies]
 ink_e2e = "4.2.0"
-d9_usdt = { version = "^1.0.0", path = "../tokens/usdt", default-features = false }
+usdt = { version = "^1.0.0", path = "../tokens/usdt", default-features = false }
 [lib]
 path = "lib.rs"
 
@@ -29,7 +25,7 @@ std = [
     "ink/std",
     "scale/std",
     "scale-info/std",
-    "d9-chain-extension/std",
+    "chain-extension/std",
     "bs58/std",
     "hex/std",
 ]

@@ -15,7 +15,7 @@ jobs:
         uses: actions/checkout@v3  # Updated to v3
 
       - name: Set up Rust
-        uses: dtolnay/rust-toolchain@stable  # Better maintained action
+        uses: dtolnay/rust-toolchain@1.79.0
         with:
           components: rust-src
 
@@ -32,7 +32,7 @@ jobs:
         run: |
           # Check if already installed
           if ! command -v cargo-contract &> /dev/null; then
-            cargo install cargo-contract --version "^3.2.0"
+            cargo install cargo-contract --version 3.2.0 --locked
           fi
 
       - name: Cache cargo binaries

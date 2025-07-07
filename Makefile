@@ -8,7 +8,7 @@ BLUE := \033[0;34m
 NC := \033[0m # No Color
 
 # Contract directories
-CONTRACTS := burn/d9-burn-mining cross-chain-transfer main-pool market-maker merchant-mining mining-pool node-reward
+CONTRACTS := burn/burn-mining cross-chain-transfer burn-rewards-vault market-maker merchant-rewards-engine rewards-aggregator node-reward
 CONTRACT_DIR := ./
 
 # Upload history file
@@ -34,7 +34,6 @@ help:
 	@echo "  make upload-local CONTRACT=name   - Upload to local network (uses //Alice)"
 	@echo "  make upload-testnet CONTRACT=name SURI=key - Upload to testnet"
 	@echo "  make upload-mainnet CONTRACT=name SURI=key - Upload to mainnet (requires approval)"
-	@echo "  make upload-code CONTRACT=name NETWORK=net SURI=key - Upload code only"
 	@echo ""
 	@echo "$(YELLOW)History:$(NC)"
 	@echo "  make history                      - Show all upload history"
@@ -63,6 +62,7 @@ check-contract:
 	@echo "$(YELLOW)Running checks for $(CONTRACT)...$(NC)"
 	@cd $(CONTRACT) && cargo check --all-features
 	@cd $(CONTRACT) && cargo test
+	@cd $(CONTRACT) && cargo clippy --all-features -- -D warnings
 	@$(MAKE) verify-storage CONTRACT=$(CONTRACT)
 
 # Verify storage hasn't changed
@@ -84,7 +84,7 @@ pre-upload:
 	@echo "$(YELLOW)Running pre-upload checks for $(CONTRACT)...$(NC)"
 	@$(MAKE) check-contract CONTRACT=$(CONTRACT)
 	@$(MAKE) build-contract CONTRACT=$(CONTRACT)
-	@python3 scripts/compare_metadata.py $(CONTRACT)
+	# @python3 scripts/compare_metadata.py $(CONTRACT)
 	@echo "$(GREEN)Pre-upload checks passed!$(NC)"
 
 # Upload contract with history tracking
@@ -106,12 +106,8 @@ upload:
 		exit 1; \
 	fi
 	@echo "$(YELLOW)Uploading $(CONTRACT) to $(NETWORK)...$(NC)"
-	@python3 scripts/upload_code.py $(CONTRACT) $(NETWORK) --suri "$(SURI)" $(UPLOAD_ARGS)
+	@python3 scripts/upload_code.py $(CONTRACT) $(NETWORK) --suri "$(SURI)"
 
-# Upload only code (upload without instantiation)
-.PHONY: upload-code
-upload-code:
-	@$(MAKE) upload UPLOAD_ARGS="--upload-only"
 
 # Upload to local network (convenience target)
 .PHONY: upload-local

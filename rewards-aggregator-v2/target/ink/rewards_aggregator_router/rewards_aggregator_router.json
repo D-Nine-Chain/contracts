@@ -1,0 +1,1528 @@
+{
+  "source": {
+    "hash": "0x7c6e2969d051dc4383b7a7e96aeb2d71601f2e9d9f47661517ecd1df44fb033d",
+    "language": "ink! 4.3.0",
+    "compiler": "rustc 1.82.0",
+    "build_info": {
+      "build_mode": "Release",
+      "cargo_contract_version": "3.2.0",
+      "rust_toolchain": "stable-aarch64-apple-darwin",
+      "wasm_opt_settings": {
+        "keep_debug_symbols": false,
+        "optimization_passes": "Z"
+      }
+    }
+  },
+  "contract": {
+    "name": "rewards-aggregator-router",
+    "version": "2.0.0",
+    "authors": [
+      "D9"
+    ]
+  },
+  "spec": {
+    "constructors": [
+      {
+        "args": [
+          {
+            "label": "storage_core",
+            "type": {
+              "displayName": [
+                "AccountId"
+              ],
+              "type": 0
+            }
+          },
+          {
+            "label": "node_reward_contract",
+            "type": {
+              "displayName": [
+                "AccountId"
+              ],
+              "type": 0
+            }
+          },
+          {
+            "label": "merchant_contract",
+            "type": {
+              "displayName": [
+                "AccountId"
+              ],
+              "type": 0
+            }
+          },
+          {
+            "label": "amm_contract",
+            "type": {
+              "displayName": [
+                "AccountId"
+              ],
+              "type": 0
+            }
+          }
+        ],
+        "default": false,
+        "docs": [],
+        "label": "new",
+        "payable": false,
+        "returnType": {
+          "displayName": [
+            "ink_primitives",
+            "ConstructorResult"
+          ],
+          "type": 11
+        },
+        "selector": "0x9bae9d5e"
+      }
+    ],
+    "docs": [],
+    "environment": {
+      "accountId": {
+        "displayName": [
+          "AccountId"
+        ],
+        "type": 0
+      },
+      "balance": {
+        "displayName": [
+          "Balance"
+        ],
+        "type": 22
+      },
+      "blockNumber": {
+        "displayName": [
+          "BlockNumber"
+        ],
+        "type": 19
+      },
+      "chainExtension": {
+        "displayName": [
+          "ChainExtension"
+        ],
+        "type": 27
+      },
+      "hash": {
+        "displayName": [
+          "Hash"
+        ],
+        "type": 26
+      },
+      "maxEventTopics": 4,
+      "timestamp": {
+        "displayName": [
+          "Timestamp"
+        ],
+        "type": 3
+      }
+    },
+    "events": [
+      {
+        "args": [
+          {
+            "docs": [],
+            "indexed": true,
+            "label": "logic",
+            "type": {
+              "displayName": [
+                "AccountId"
+              ],
+              "type": 0
+            }
+          },
+          {
+            "docs": [],
+            "indexed": false,
+            "label": "version",
+            "type": {
+              "displayName": [
+                "u32"
+              ],
+              "type": 19
+            }
+          },
+          {
+            "docs": [],
+            "indexed": false,
+            "label": "selectors",
+            "type": {
+              "displayName": [
+                "Vec"
+              ],
+              "type": 25
+            }
+          }
+        ],
+        "docs": [],
+        "label": "LogicRegistered"
+      }
+    ],
+    "lang_error": {
+      "displayName": [
+        "ink",
+        "LangError"
+      ],
+      "type": 13
+    },
+    "messages": [
+      {
+        "args": [],
+        "default": false,
+        "docs": [],
+        "label": "pause",
+        "mutates": true,
+        "payable": false,
+        "returnType": {
+          "displayName": [
+            "ink",
+            "MessageResult"
+          ],
+          "type": 14
+        },
+        "selector": "0x81e0c604"
+      },
+      {
+        "args": [],
+        "default": false,
+        "docs": [],
+        "label": "unpause",
+        "mutates": true,
+        "payable": false,
+        "returnType": {
+          "displayName": [
+            "ink",
+            "MessageResult"
+          ],
+          "type": 14
+        },
+        "selector": "0x67616649"
+      },
+      {
+        "args": [
+          {
+            "label": "new_admin",
+            "type": {
+              "displayName": [
+                "AccountId"
+              ],
+              "type": 0
+            }
+          }
+        ],
+        "default": false,
+        "docs": [],
+        "label": "transfer_admin",
+        "mutates": true,
+        "payable": false,
+        "returnType": {
+          "displayName": [
+            "ink",
+            "MessageResult"
+          ],
+          "type": 14
+        },
+        "selector": "0xd26c8e14"
+      },
+      {
+        "args": [],
+        "default": false,
+        "docs": [],
+        "label": "accept_admin",
+        "mutates": true,
+        "payable": false,
+        "returnType": {
+          "displayName": [
+            "ink",
+            "MessageResult"
+          ],
+          "type": 14
+        },
+        "selector": "0x3830821d"
+      },
+      {
+        "args": [
+          {
+            "label": "selector",
+            "type": {
+              "displayName": [],
+              "type": 6
+            }
+          }
+        ],
+        "default": false,
+        "docs": [],
+        "label": "activate_route",
+        "mutates": true,
+        "payable": false,
+        "returnType": {
+          "displayName": [
+            "ink",
+            "MessageResult"
+          ],
+          "type": 14
+        },
+        "selector": "0x87620c83"
+      },
+      {
+        "args": [
+          {
+            "label": "logic",
+            "type": {
+              "displayName": [
+                "AccountId"
+              ],
+              "type": 0
+            }
+          }
+        ],
+        "default": false,
+        "docs": [],
+        "label": "register_logic_contract",
+        "mutates": true,
+        "payable": false,
+        "returnType": {
+          "displayName": [
+            "ink",
+            "MessageResult"
+          ],
+          "type": 14
+        },
+        "selector": "0x53c4a457"
+      },
+      {
+        "args": [
+          {
+            "label": "session_index",
+            "type": {
+              "displayName": [
+                "u32"
+              ],
+              "type": 19
+            }
+          }
+        ],
+        "default": false,
+        "docs": [],
+        "label": "update_pool_and_retrieve",
+        "mutates": true,
+        "payable": false,
+        "returnType": {
+          "displayName": [
+            "ink",
+            "MessageResult"
+          ],
+          "type": 20
+        },
+        "selector": "0x8a1783cd"
+      },
+      {
+        "args": [
+          {
+            "label": "account_id",
+            "type": {
+              "displayName": [
+                "AccountId"
+              ],
+              "type": 0
+            }
+          },
+          {
+            "label": "amount",
+            "type": {
+              "displayName": [
+                "Balance"
+              ],
+              "type": 22
+            }
+          }
+        ],
+        "default": false,
+        "docs": [],
+        "label": "pay_node_reward",
+        "mutates": true,
+        "payable": false,
+        "returnType": {
+          "displayName": [
+            "ink",
+            "MessageResult"
+          ],
+          "type": 14
+        },
+        "selector": "0x2f0dd006"
+      },
+      {
+        "args": [
+          {
+            "label": "amount",
+            "type": {
+              "displayName": [
+                "Balance"
+              ],
+              "type": 22
+            }
+          }
+        ],
+        "default": false,
+        "docs": [],
+        "label": "deduct_from_reward_pool",
+        "mutates": true,
+        "payable": false,
+        "returnType": {
+          "displayName": [
+            "ink",
+            "MessageResult"
+          ],
+          "type": 14
+        },
+        "selector": "0x7df305eb"
+      },
+      {
+        "args": [
+          {
+            "label": "merchant_id",
+            "type": {
+              "displayName": [
+                "AccountId"
+              ],
+              "type": 0
+            }
+          }
+        ],
+        "default": false,
+        "docs": [],
+        "label": "process_merchant_payment",
+        "mutates": true,
+        "payable": true,
+        "returnType": {
+          "displayName": [
+            "ink",
+            "MessageResult"
+          ],
+          "type": 14
+        },
+        "selector": "0xcbdfeaf9"
+      },
+      {
+        "args": [
+          {
+            "label": "user_account",
+            "type": {
+              "displayName": [
+                "AccountId"
+              ],
+              "type": 0
+            }
+          },
+          {
+            "label": "redeemable_usdt",
+            "type": {
+              "displayName": [
+                "Balance"
+              ],
+              "type": 22
+            }
+          }
+        ],
+        "default": false,
+        "docs": [],
+        "label": "merchant_user_redeem_d9",
+        "mutates": true,
+        "payable": false,
+        "returnType": {
+          "displayName": [
+            "ink",
+            "MessageResult"
+          ],
+          "type": 20
+        },
+        "selector": "0x152062a1"
+      },
+      {
+        "args": [],
+        "default": false,
+        "docs": [],
+        "label": "get_storage_core",
+        "mutates": false,
+        "payable": false,
+        "returnType": {
+          "displayName": [
+            "ink",
+            "MessageResult"
+          ],
+          "type": 23
+        },
+        "selector": "0xeee9a3bc"
+      },
+      {
+        "args": [],
+        "default": false,
+        "docs": [],
+        "label": "get_admin",
+        "mutates": false,
+        "payable": false,
+        "returnType": {
+          "displayName": [
+            "ink",
+            "MessageResult"
+          ],
+          "type": 23
+        },
+        "selector": "0x57b8a8a7"
+      },
+      {
+        "args": [],
+        "default": false,
+        "docs": [],
+        "label": "is_paused",
+        "mutates": false,
+        "payable": false,
+        "returnType": {
+          "displayName": [
+            "ink",
+            "MessageResult"
+          ],
+          "type": 24
+        },
+        "selector": "0xfa7d505b"
+      }
+    ]
+  },
+  "storage": {
+    "root": {
+      "layout": {
+        "struct": {
+          "fields": [
+            {
+              "layout": {
+                "struct": {
+                  "fields": [
+                    {
+                      "layout": {
+                        "leaf": {
+                          "key": "0x00000000",
+                          "ty": 0
+                        }
+                      },
+                      "name": "admin"
+                    },
+                    {
+                      "layout": {
+                        "enum": {
+                          "dispatchKey": "0x00000000",
+                          "name": "Option",
+                          "variants": {
+                            "0": {
+                              "fields": [],
+                              "name": "None"
+                            },
+                            "1": {
+                              "fields": [
+                                {
+                                  "layout": {
+                                    "leaf": {
+                                      "key": "0x00000000",
+                                      "ty": 0
+                                    }
+                                  },
+                                  "name": "0"
+                                }
+                              ],
+                              "name": "Some"
+                            }
+                          }
+                        }
+                      },
+                      "name": "pending_admin"
+                    },
+                    {
+                      "layout": {
+                        "enum": {
+                          "dispatchKey": "0x00000000",
+                          "name": "Option",
+                          "variants": {
+                            "0": {
+                              "fields": [],
+                              "name": "None"
+                            },
+                            "1": {
+                              "fields": [
+                                {
+                                  "layout": {
+                                    "leaf": {
+                                      "key": "0x00000000",
+                                      "ty": 3
+                                    }
+                                  },
+                                  "name": "0"
+                                }
+                              ],
+                              "name": "Some"
+                            }
+                          }
+                        }
+                      },
+                      "name": "admin_changed_at"
+                    }
+                  ],
+                  "name": "AdminControl"
+                }
+              },
+              "name": "admin"
+            },
+            {
+              "layout": {
+                "struct": {
+                  "fields": [
+                    {
+                      "layout": {
+                        "leaf": {
+                          "key": "0x00000000",
+                          "ty": 4
+                        }
+                      },
+                      "name": "paused"
+                    },
+                    {
+                      "layout": {
+                        "enum": {
+                          "dispatchKey": "0x00000000",
+                          "name": "Option",
+                          "variants": {
+                            "0": {
+                              "fields": [],
+                              "name": "None"
+                            },
+                            "1": {
+                              "fields": [
+                                {
+                                  "layout": {
+                                    "leaf": {
+                                      "key": "0x00000000",
+                                      "ty": 3
+                                    }
+                                  },
+                                  "name": "0"
+                                }
+                              ],
+                              "name": "Some"
+                            }
+                          }
+                        }
+                      },
+                      "name": "pause_started"
+                    },
+                    {
+                      "layout": {
+                        "enum": {
+                          "dispatchKey": "0x00000000",
+                          "name": "Option",
+                          "variants": {
+                            "0": {
+                              "fields": [],
+                              "name": "None"
+                            },
+                            "1": {
+                              "fields": [
+                                {
+                                  "layout": {
+                                    "enum": {
+                                      "dispatchKey": "0x00000000",
+                                      "name": "PauseReason",
+                                      "variants": {
+                                        "0": {
+                                          "fields": [],
+                                          "name": "Emergency"
+                                        },
+                                        "1": {
+                                          "fields": [],
+                                          "name": "Maintenance"
+                                        },
+                                        "2": {
+                                          "fields": [],
+                                          "name": "Migration"
+                                        },
+                                        "3": {
+                                          "fields": [],
+                                          "name": "SecurityIncident"
+                                        },
+                                        "4": {
+                                          "fields": [
+                                            {
+                                              "layout": {
+                                                "leaf": {
+                                                  "key": "0x00000000",
+                                                  "ty": 2
+                                                }
+                                              },
+                                              "name": "0"
+                                            }
+                                          ],
+                                          "name": "Other"
+                                        }
+                                      }
+                                    }
+                                  },
+                                  "name": "0"
+                                }
+                              ],
+                              "name": "Some"
+                            }
+                          }
+                        }
+                      },
+                      "name": "pause_reason"
+                    }
+                  ],
+                  "name": "Pausable"
+                }
+              },
+              "name": "pausable"
+            },
+            {
+              "layout": {
+                "struct": {
+                  "fields": [
+                    {
+                      "layout": {
+                        "leaf": {
+                          "key": "0x00000000",
+                          "ty": 4
+                        }
+                      },
+                      "name": "locked"
+                    }
+                  ],
+                  "name": "ReentrancyGuard"
+                }
+              },
+              "name": "reentrancy_guard"
+            },
+            {
+              "layout": {
+                "struct": {
+                  "fields": [
+                    {
+                      "layout": {
+                        "leaf": {
+                          "key": "0x00000000",
+                          "ty": 5
+                        }
+                      },
+                      "name": "routes"
+                    },
+                    {
+                      "layout": {
+                        "leaf": {
+                          "key": "0x00000000",
+                          "ty": 10
+                        }
+                      },
+                      "name": "authorized_routers"
+                    },
+                    {
+                      "layout": {
+                        "leaf": {
+                          "key": "0x00000000",
+                          "ty": 3
+                        }
+                      },
+                      "name": "nonce_counter"
+                    }
+                  ],
+                  "name": "RouterState"
+                }
+              },
+              "name": "router_state"
+            },
+            {
+              "layout": {
+                "leaf": {
+                  "key": "0x00000000",
+                  "ty": 0
+                }
+              },
+              "name": "storage_core"
+            },
+            {
+              "layout": {
+                "leaf": {
+                  "key": "0x00000000",
+                  "ty": 0
+                }
+              },
+              "name": "node_reward_contract"
+            },
+            {
+              "layout": {
+                "leaf": {
+                  "key": "0x00000000",
+                  "ty": 0
+                }
+              },
+              "name": "merchant_contract"
+            },
+            {
+              "layout": {
+                "leaf": {
+                  "key": "0x00000000",
+                  "ty": 0
+                }
+              },
+              "name": "amm_contract"
+            }
+          ],
+          "name": "RewardsAggregatorRouter"
+        }
+      },
+      "root_key": "0x00000000"
+    }
+  },
+  "types": [
+    {
+      "id": 0,
+      "type": {
+        "def": {
+          "composite": {
+            "fields": [
+              {
+                "type": 1,
+                "typeName": "[u8; 32]"
+              }
+            ]
+          }
+        },
+        "path": [
+          "ink_primitives",
+          "types",
+          "AccountId"
+        ]
+      }
+    },
+    {
+      "id": 1,
+      "type": {
+        "def": {
+          "array": {
+            "len": 32,
+            "type": 2
+          }
+        }
+      }
+    },
+    {
+      "id": 2,
+      "type": {
+        "def": {
+          "primitive": "u8"
+        }
+      }
+    },
+    {
+      "id": 3,
+      "type": {
+        "def": {
+          "primitive": "u64"
+        }
+      }
+    },
+    {
+      "id": 4,
+      "type": {
+        "def": {
+          "primitive": "bool"
+        }
+      }
+    },
+    {
+      "id": 5,
+      "type": {
+        "def": {
+          "composite": {
+            "fields": [
+              {
+                "type": 8
+              }
+            ]
+          }
+        },
+        "params": [
+          {
+            "name": "K",
+            "type": 6
+          },
+          {
+            "name": "V",
+            "type": 7
+          }
+        ],
+        "path": [
+          "BTreeMap"
+        ]
+      }
+    },
+    {
+      "id": 6,
+      "type": {
+        "def": {
+          "array": {
+            "len": 4,
+            "type": 2
+          }
+        }
+      }
+    },
+    {
+      "id": 7,
+      "type": {
+        "def": {
+          "composite": {
+            "fields": [
+              {
+                "name": "selector",
+                "type": 6,
+                "typeName": "[u8; 4]"
+              },
+              {
+                "name": "logic",
+                "type": 0,
+                "typeName": "AccountId"
+              },
+              {
+                "name": "active",
+                "type": 4,
+                "typeName": "bool"
+              },
+              {
+                "name": "max_context_age",
+                "type": 3,
+                "typeName": "Timestamp"
+              }
+            ]
+          }
+        },
+        "path": [
+          "prism",
+          "prism",
+          "Route"
+        ]
+      }
+    },
+    {
+      "id": 8,
+      "type": {
+        "def": {
+          "sequence": {
+            "type": 9
+          }
+        }
+      }
+    },
+    {
+      "id": 9,
+      "type": {
+        "def": {
+          "tuple": [
+            6,
+            7
+          ]
+        }
+      }
+    },
+    {
+      "id": 10,
+      "type": {
+        "def": {
+          "sequence": {
+            "type": 0
+          }
+        }
+      }
+    },
+    {
+      "id": 11,
+      "type": {
+        "def": {
+          "variant": {
+            "variants": [
+              {
+                "fields": [
+                  {
+                    "type": 12
+                  }
+                ],
+                "index": 0,
+                "name": "Ok"
+              },
+              {
+                "fields": [
+                  {
+                    "type": 13
+                  }
+                ],
+                "index": 1,
+                "name": "Err"
+              }
+            ]
+          }
+        },
+        "params": [
+          {
+            "name": "T",
+            "type": 12
+          },
+          {
+            "name": "E",
+            "type": 13
+          }
+        ],
+        "path": [
+          "Result"
+        ]
+      }
+    },
+    {
+      "id": 12,
+      "type": {
+        "def": {
+          "tuple": []
+        }
+      }
+    },
+    {
+      "id": 13,
+      "type": {
+        "def": {
+          "variant": {
+            "variants": [
+              {
+                "index": 1,
+                "name": "CouldNotReadInput"
+              }
+            ]
+          }
+        },
+        "path": [
+          "ink_primitives",
+          "LangError"
+        ]
+      }
+    },
+    {
+      "id": 14,
+      "type": {
+        "def": {
+          "variant": {
+            "variants": [
+              {
+                "fields": [
+                  {
+                    "type": 15
+                  }
+                ],
+                "index": 0,
+                "name": "Ok"
+              },
+              {
+                "fields": [
+                  {
+                    "type": 13
+                  }
+                ],
+                "index": 1,
+                "name": "Err"
+              }
+            ]
+          }
+        },
+        "params": [
+          {
+            "name": "T",
+            "type": 15
+          },
+          {
+            "name": "E",
+            "type": 13
+          }
+        ],
+        "path": [
+          "Result"
+        ]
+      }
+    },
+    {
+      "id": 15,
+      "type": {
+        "def": {
+          "variant": {
+            "variants": [
+              {
+                "fields": [
+                  {
+                    "type": 12
+                  }
+                ],
+                "index": 0,
+                "name": "Ok"
+              },
+              {
+                "fields": [
+                  {
+                    "type": 16
+                  }
+                ],
+                "index": 1,
+                "name": "Err"
+              }
+            ]
+          }
+        },
+        "params": [
+          {
+            "name": "T",
+            "type": 12
+          },
+          {
+            "name": "E",
+            "type": 16
+          }
+        ],
+        "path": [
+          "Result"
+        ]
+      }
+    },
+    {
+      "id": 16,
+      "type": {
+        "def": {
+          "variant": {
+            "variants": [
+              {
+                "fields": [
+                  {
+                    "type": 0,
+                    "typeName": "AccountId"
+                  }
+                ],
+                "index": 0,
+                "name": "OnlyCallableBy"
+              },
+              {
+                "fields": [
+                  {
+                    "type": 17,
+                    "typeName": "SafetyError"
+                  }
+                ],
+                "index": 1,
+                "name": "SafetyError"
+              },
+              {
+                "fields": [
+                  {
+                    "type": 18,
+                    "typeName": "PrismError"
+                  }
+                ],
+                "index": 2,
+                "name": "PrismError"
+              },
+              {
+                "index": 3,
+                "name": "StorageError"
+              },
+              {
+                "index": 4,
+                "name": "LogicError"
+              },
+              {
+                "index": 5,
+                "name": "EnvironmentError"
+              },
+              {
+                "index": 6,
+                "name": "AlreadyInitialized"
+              }
+            ]
+          }
+        },
+        "path": [
+          "rewards_aggregator_router",
+          "rewards_aggregator_router",
+          "Error"
+        ]
+      }
+    },
+    {
+      "id": 17,
+      "type": {
+        "def": {
+          "variant": {
+            "variants": [
+              {
+                "index": 0,
+                "name": "NotAdmin"
+              },
+              {
+                "index": 1,
+                "name": "NotPendingAdmin"
+              },
+              {
+                "index": 2,
+                "name": "ContractPaused"
+              },
+              {
+                "index": 3,
+                "name": "AlreadyPaused"
+              },
+              {
+                "index": 4,
+                "name": "NotPaused"
+              },
+              {
+                "index": 5,
+                "name": "RateLimitExceeded"
+              },
+              {
+                "index": 6,
+                "name": "InvalidThreshold"
+              },
+              {
+                "index": 7,
+                "name": "NotSigner"
+              },
+              {
+                "index": 8,
+                "name": "AlreadyExecuted"
+              },
+              {
+                "index": 9,
+                "name": "InsufficientApprovals"
+              },
+              {
+                "index": 10,
+                "name": "ExceedsTransactionLimit"
+              },
+              {
+                "index": 11,
+                "name": "ExceedsDailyLimit"
+              },
+              {
+                "index": 12,
+                "name": "AccountSuspended"
+              },
+              {
+                "index": 13,
+                "name": "ReentrantCall"
+              }
+            ]
+          }
+        },
+        "path": [
+          "safety",
+          "d9_safety",
+          "SafetyError"
+        ]
+      }
+    },
+    {
+      "id": 18,
+      "type": {
+        "def": {
+          "variant": {
+            "variants": [
+              {
+                "index": 0,
+                "name": "ContextExpired"
+              },
+              {
+                "index": 1,
+                "name": "InvalidContext"
+              },
+              {
+                "index": 2,
+                "name": "UnauthorizedRouter"
+              },
+              {
+                "index": 3,
+                "name": "UnauthorizedAccess"
+              },
+              {
+                "index": 4,
+                "name": "InvalidToken"
+              },
+              {
+                "index": 5,
+                "name": "TokenExpired"
+              },
+              {
+                "index": 6,
+                "name": "TokenAlreadyUsed"
+              },
+              {
+                "index": 7,
+                "name": "RouteNotFound"
+              },
+              {
+                "index": 8,
+                "name": "LogicNotFound"
+              },
+              {
+                "index": 9,
+                "name": "InactiveRoute"
+              },
+              {
+                "index": 10,
+                "name": "MissingRequiredExtension"
+              },
+              {
+                "index": 11,
+                "name": "ExtensionNotFound"
+              },
+              {
+                "index": 12,
+                "name": "NotImplemented"
+              },
+              {
+                "index": 13,
+                "name": "InvalidOperation"
+              }
+            ]
+          }
+        },
+        "path": [
+          "prism",
+          "prism",
+          "PrismError"
+        ]
+      }
+    },
+    {
+      "id": 19,
+      "type": {
+        "def": {
+          "primitive": "u32"
+        }
+      }
+    },
+    {
+      "id": 20,
+      "type": {
+        "def": {
+          "variant": {
+            "variants": [
+              {
+                "fields": [
+                  {
+                    "type": 21
+                  }
+                ],
+                "index": 0,
+                "name": "Ok"
+              },
+              {
+                "fields": [
+                  {
+                    "type": 13
+                  }
+                ],
+                "index": 1,
+                "name": "Err"
+              }
+            ]
+          }
+        },
+        "params": [
+          {
+            "name": "T",
+            "type": 21
+          },
+          {
+            "name": "E",
+            "type": 13
+          }
+        ],
+        "path": [
+          "Result"
+        ]
+      }
+    },
+    {
+      "id": 21,
+      "type": {
+        "def": {
+          "variant": {
+            "variants": [
+              {
+                "fields": [
+                  {
+                    "type": 22
+                  }
+                ],
+                "index": 0,
+                "name": "Ok"
+              },
+              {
+                "fields": [
+                  {
+                    "type": 16
+                  }
+                ],
+                "index": 1,
+                "name": "Err"
+              }
+            ]
+          }
+        },
+        "params": [
+          {
+            "name": "T",
+            "type": 22
+          },
+          {
+            "name": "E",
+            "type": 16
+          }
+        ],
+        "path": [
+          "Result"
+        ]
+      }
+    },
+    {
+      "id": 22,
+      "type": {
+        "def": {
+          "primitive": "u128"
+        }
+      }
+    },
+    {
+      "id": 23,
+      "type": {
+        "def": {
+          "variant": {
+            "variants": [
+              {
+                "fields": [
+                  {
+                    "type": 0
+                  }
+                ],
+                "index": 0,
+                "name": "Ok"
+              },
+              {
+                "fields": [
+                  {
+                    "type": 13
+                  }
+                ],
+                "index": 1,
+                "name": "Err"
+              }
+            ]
+          }
+        },
+        "params": [
+          {
+            "name": "T",
+            "type": 0
+          },
+          {
+            "name": "E",
+            "type": 13
+          }
+        ],
+        "path": [
+          "Result"
+        ]
+      }
+    },
+    {
+      "id": 24,
+      "type": {
+        "def": {
+          "variant": {
+            "variants": [
+              {
+                "fields": [
+                  {
+                    "type": 4
+                  }
+                ],
+                "index": 0,
+                "name": "Ok"
+              },
+              {
+                "fields": [
+                  {
+                    "type": 13
+                  }
+                ],
+                "index": 1,
+                "name": "Err"
+              }
+            ]
+          }
+        },
+        "params": [
+          {
+            "name": "T",
+            "type": 4
+          },
+          {
+            "name": "E",
+            "type": 13
+          }
+        ],
+        "path": [
+          "Result"
+        ]
+      }
+    },
+    {
+      "id": 25,
+      "type": {
+        "def": {
+          "sequence": {
+            "type": 6
+          }
+        }
+      }
+    },
+    {
+      "id": 26,
+      "type": {
+        "def": {
+          "composite": {
+            "fields": [
+              {
+                "type": 1,
+                "typeName": "[u8; 32]"
+              }
+            ]
+          }
+        },
+        "path": [
+          "ink_primitives",
+          "types",
+          "Hash"
+        ]
+      }
+    },
+    {
+      "id": 27,
+      "type": {
+        "def": {
+          "variant": {}
+        },
+        "path": [
+          "ink_env",
+          "types",
+          "NoChainExtension"
+        ]
+      }
+    }
+  ],
+  "version": "4"
+}

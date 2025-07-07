@@ -1,0 +1,22 @@
+[package]
+name = "prism"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+ink.workspace = true
+scale.workspace = true
+scale-info = { workspace = true, optional = true }
+d9-environment = { path = "../d9-environment", default-features = false }
+
+[lib]
+path = "src/lib.rs"
+
+[features]
+default = ["std"]
+std = [
+    "ink/std",
+    "scale/std",
+    "scale-info/std",
+    "d9-environment/std",
+]

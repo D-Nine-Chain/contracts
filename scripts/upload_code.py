@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Deployment script using cargo contract
+Contract code upload script using cargo contract
 """
 
 import os
@@ -11,7 +11,7 @@ import hashlib
 from datetime import datetime
 from typing import Dict, Optional, Tuple
 
-class ContractDeployer:
+class ContractUploader:
     def __init__(self):
         self.history_file = "upload-history.json"
         self.approvals_file = ".github/pr-approvals.json"
@@ -23,12 +23,12 @@ class ContractDeployer:
             },
             "testnet": {
                 "url": "wss://testnet.d9network.org:4030",
-                "allowed_branches": ["main", "develop", "feature/*"],
+                "allowed_branches": None,  # Any branch allowed for testnet
                 "requires_approval": False
             },
             "mainnet": {
                 "url": "wss://mainnet.d9network.com:40300", 
-                "allowed_branches": ["main"],
+                "allowed_branches": ["main"],  # Only main branch for mainnet
                 "requires_approval": True
             }
         }
@@ -82,7 +82,9 @@ class ContractDeployer:
         
         # Check hash approval for mainnet
         if network_config["requires_approval"]:
-            wasm_path = f"{contract}/target/ink/{contract}.wasm"
+            # Cargo converts hyphens to underscores in output paths
+            contract_underscore = contract.replace('-', '_')
+            wasm_path = f"target/ink/{contract_underscore}/{contract_underscore}.wasm"
             if not os.path.exists(wasm_path):
                 return False, "Contract not built"
                 
@@ -118,7 +120,9 @@ class ContractDeployer:
         """Upload contract code and return code hash"""
         print(f"\n📤 Uploading contract code to {network}...")
         
-        wasm_path = f"{contract}/target/ink/{contract}.wasm"
+        # Cargo converts hyphens to underscores in output paths
+        contract_underscore = contract.replace('-', '_')
+        wasm_path = f"target/ink/{contract_underscore}/{contract_underscore}.wasm"
         network_url = self.networks[network]["url"]
         
         # Use cargo contract upload
@@ -147,45 +151,46 @@ class ContractDeployer:
         return None
     
     
-    def deploy(self, contract: str, network: str, suri: str, 
-               upload_only: bool = False, constructor: str = "new", args: list = None):
-        """Main deployment function"""
-        print(f"\n🚀 Deploying {contract} to {network}")
+    def upload(self, contract: str, network: str, suri: str):
+        """Main upload function"""
+        print(f"\n📤 Uploading {contract} to {network}")
         print("=" * 60)
         
-        # Verify deployment is allowed
+        # Verify upload is allowed
         allowed, message = self.verify_deployment_allowed(contract, network)
         if not allowed:
-            print(f"❌ Deployment not allowed: {message}")
+            print(f"❌ Upload not allowed: {message}")
             sys.exit(1)
         
-        print(f"✅ Deployment checks passed: {message}")
+        print(f"✅ Upload checks passed: {message}")
         
         # Build contract
         if not self.build_contract(contract):
             sys.exit(1)
         
         # Get code hash for recording
-        wasm_path = f"{contract}/target/ink/{contract}.wasm"
+        # Cargo converts hyphens to underscores in output paths
+        contract_underscore = contract.replace('-', '_')
+        wasm_path = f"target/ink/{contract_underscore}/{contract_underscore}.wasm"
         local_code_hash = self.calculate_code_hash(wasm_path)
         
-        # Confirm deployment
-        print(f"\n📋 Deployment Summary:")
+        # Confirm upload
+        print(f"\n📋 Upload Summary:")
         print(f"   Contract: {contract}")
         print(f"   Network: {network}")
         print(f"   Branch: {self.get_current_branch()}")
         print(f"   Code Hash: {local_code_hash}")
         
         if network == "mainnet":
-            print("\n🚨 MAINNET DEPLOYMENT WARNING 🚨")
-            confirm = input("Type 'DEPLOY TO MAINNET' to continue: ")
-            if confirm != "DEPLOY TO MAINNET":
-                print("Deployment cancelled")
+            print("\n🚨 MAINNET UPLOAD WARNING 🚨")
+            confirm = input("Type 'UPLOAD TO MAINNET' to continue: ")
+            if confirm != "UPLOAD TO MAINNET":
+                print("Upload cancelled")
                 return
         else:
             confirm = input("\nContinue? (y/n): ")
             if confirm.lower() != 'y':
-                print("Deployment cancelled")
+                print("Upload cancelled")
                 return
         
         # Upload code
@@ -193,25 +198,17 @@ class ContractDeployer:
         if not code_hash:
             sys.exit(1)
         
-        contract_address = None
-        if not upload_only:
-            print("❌ Contract instantiation not supported. Use --upload-only flag.")
-            sys.exit(1)
-        
-        # Record deployment
-        self.record_deployment(
+        # Record upload
+        self.record_upload(
             contract=contract,
             network=network,
-            code_hash=code_hash,
-            contract_address=contract_address,
-            upload_only=upload_only
+            code_hash=code_hash
         )
         
-        print(f"\n✅ Deployment completed successfully!")
+        print(f"\n✅ Code upload completed successfully!")
     
-    def record_deployment(self, contract: str, network: str, code_hash: str, 
-                         contract_address: Optional[str], upload_only: bool):
-        """Record deployment in history"""
+    def record_upload(self, contract: str, network: str, code_hash: str):
+        """Record upload in history"""
         history = {}
         if os.path.exists(self.history_file):
             with open(self.history_file, 'r') as f:
@@ -220,14 +217,12 @@ class ContractDeployer:
         if contract not in history:
             history[contract] = []
         
-        deployment = {
+        upload = {
             "timestamp": datetime.now().isoformat(),
             "network": network,
             "branch": self.get_current_branch(),
             "code_hash": code_hash,
-            "contract_address": contract_address,
-            "upload_only": upload_only,
-            "deployed_by": os.environ.get("USER", "unknown"),
+            "uploaded_by": os.environ.get("USER", "unknown"),
             "git_commit": subprocess.run(
                 ["git", "rev-parse", "HEAD"],
                 capture_output=True,
@@ -235,11 +230,11 @@ class ContractDeployer:
             ).stdout.strip()
         }
         
-        # Get previous deployment if exists
+        # Get previous upload if exists
         if history[contract]:
-            deployment["previous_code_hash"] = history[contract][-1].get("code_hash")
+            upload["previous_code_hash"] = history[contract][-1].get("code_hash")
         
-        history[contract].append(deployment)
+        history[contract].append(upload)
         
         with open(self.history_file, 'w') as f:
             json.dump(history, f, indent=2)
@@ -248,27 +243,18 @@ class ContractDeployer:
 def main():
     import argparse
     
-    parser = argparse.ArgumentParser(description="Deploy ink! contracts")
+    parser = argparse.ArgumentParser(description="Upload ink! contract code")
     parser.add_argument("contract", help="Contract name (e.g., mining-pool)")
     parser.add_argument("network", choices=["local", "testnet", "mainnet"])
     parser.add_argument("--suri", required=True, help="Secret URI for signing")
-    parser.add_argument("--upload-only", action="store_true", 
-                       help="Only upload code, don't instantiate")
-    parser.add_argument("--constructor", default="new", 
-                       help="Constructor function name")
-    parser.add_argument("--args", nargs="*", 
-                       help="Constructor arguments")
     
     args = parser.parse_args()
     
-    deployer = ContractDeployer()
-    deployer.deploy(
+    uploader = ContractUploader()
+    uploader.upload(
         contract=args.contract,
         network=args.network,
-        suri=args.suri,
-        upload_only=args.upload_only,
-        constructor=args.constructor,
-        args=args.args
+        suri=args.suri
     )
 
 

@@ -16,7 +16,7 @@ jobs:
           fetch-depth: 2  # Need previous commit
           
       - name: Set up Rust
-        uses: dtolnay/rust-toolchain@stable
+        uses: dtolnay/rust-toolchain@1.79.0
         
       - name: Cache cargo binaries
         uses: actions/cache@v3
@@ -30,7 +30,7 @@ jobs:
         run: |
           # Check and install cargo-contract if not cached
           if ! command -v cargo-contract &> /dev/null; then
-            cargo install cargo-contract --version 3.2.0
+            cargo install cargo-contract --version 3.2.0 --locked
           fi
           sudo apt-get update && sudo apt-get install -y jq python3
       

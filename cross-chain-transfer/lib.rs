@@ -1,19 +1,19 @@
 #![cfg_attr(not(feature = "std"), no_std, no_main)]
-pub use d9_chain_extension::D9Environment;
+pub use chain_extension::D9Environment;
 #[ink::contract(env = D9Environment)]
 mod cross_chain_transfer {
     use super::*;
 
     use ink::env::{
-        call::{ build_call, ExecutionInput, Selector },
-        hash::{ HashOutput, Keccak256 },
+        call::{build_call, ExecutionInput, Selector},
+        hash::{HashOutput, Keccak256},
         hash_encoded,
     };
     use ink::prelude::string::String;
+    use ink::prelude::vec::Vec;
     use ink::selector_bytes;
     use ink::storage::Mapping;
-    use ink::prelude::vec::Vec;
-    use scale::{ Decode, Encode };
+    use scale::{Decode, Encode};
     #[ink(storage)]
     pub struct CrossChainTransfer {
         //user transaction nonce
@@ -46,24 +46,31 @@ mod cross_chain_transfer {
         pub amount: u128,
     }
 
-
-
     #[derive(Encode, Decode, Debug, PartialEq, Eq, Copy, Clone)]
-    #[cfg_attr(feature = "std", derive(scale_info::TypeInfo, ink::storage::traits::StorageLayout))]
+    #[cfg_attr(
+        feature = "std",
+        derive(scale_info::TypeInfo, ink::storage::traits::StorageLayout)
+    )]
     pub enum Chain {
         D9,
         TRON,
     }
 
     #[derive(scale::Encode, scale::Decode, Clone, PartialEq, Eq, Copy, Debug)]
-    #[cfg_attr(feature = "std", derive(scale_info::TypeInfo, ink::storage::traits::StorageLayout))]
+    #[cfg_attr(
+        feature = "std",
+        derive(scale_info::TypeInfo, ink::storage::traits::StorageLayout)
+    )]
     pub enum AddressType {
         Tron([u8; 21]),
         D9(AccountId),
     }
 
     #[derive(Encode, Decode, Debug, PartialEq, Eq, Clone)]
-    #[cfg_attr(feature = "std", derive(scale_info::TypeInfo, ink::storage::traits::StorageLayout))]
+    #[cfg_attr(
+        feature = "std",
+        derive(scale_info::TypeInfo, ink::storage::traits::StorageLayout)
+    )]
     pub struct Transaction {
         transaction_id: String,
         transaction_type: TransactionType,
@@ -76,7 +83,10 @@ mod cross_chain_transfer {
     // note how do i manage from_address and to to_address for the different chains?
 
     #[derive(Encode, Decode, Debug, PartialEq, Eq, Copy, Clone)]
-    #[cfg_attr(feature = "std", derive(scale_info::TypeInfo, ink::storage::traits::StorageLayout))]
+    #[cfg_attr(
+        feature = "std",
+        derive(scale_info::TypeInfo, ink::storage::traits::StorageLayout)
+    )]
     pub enum TransactionType {
         Commit,
         Dispatch,
@@ -145,7 +155,7 @@ mod cross_chain_transfer {
 
         #[ink(message)]
         pub fn record_cancelled_tron_transfer(&mut self, user_id: AccountId) -> Result<(), Error> {
-            let _ = self.only_callable_by(self.controller)?;
+            self.only_callable_by(self.controller)?;
             self.increase_transaction_nonce(user_id);
             Ok(())
         }
@@ -189,11 +199,12 @@ mod cross_chain_transfer {
         pub fn set_code(&mut self, code_hash: [u8; 32]) {
             let caller = self.env().caller();
             assert!(caller == self.super_admin, "Only admin can set code hash.");
-            ink::env
-                ::set_code_hash(&code_hash)
-                .unwrap_or_else(|err| {
-                    panic!("Failed to `set_code_hash` to {:?} due to {:?}", code_hash, err)
-                });
+            ink::env::set_code_hash(&code_hash).unwrap_or_else(|err| {
+                panic!(
+                    "Failed to `set_code_hash` to {:?} due to {:?}",
+                    code_hash, err
+                )
+            });
             ink::env::debug_println!("Switched code hash to {:?}.", code_hash);
         }
 
@@ -203,7 +214,7 @@ mod cross_chain_transfer {
             transaction_id: String,
             from_address: AccountId,
             to_address: [u8; 21],
-            amount: Balance
+            amount: Balance,
         ) -> Result<String, Error> {
             // only controller
             let caller_check = self.only_callable_by(self.controller);
@@ -251,7 +262,8 @@ mod cross_chain_transfer {
             };
 
             self.increase_transaction_nonce(from_address);
-            self.transactions.insert(transaction_id.clone(), &transaction);
+            self.transactions
+                .insert(transaction_id.clone(), &transaction);
 
             self.env().emit_event(CommitCreated {
                 transaction_id: transaction_id.clone(),
@@ -266,7 +278,7 @@ mod cross_chain_transfer {
             &mut self,
             from_address: [u8; 21],
             to_address: AccountId,
-            amount: Balance
+            amount: Balance,
         ) -> Result<String, Error> {
             let caller_check = self.only_callable_by(self.controller);
             if let Err(e) = caller_check {
@@ -339,7 +351,8 @@ mod cross_chain_transfer {
         }
 
         fn increase_transaction_nonce(&mut self, user_id: AccountId) {
-            let user_transaction_nonce = self.user_transaction_nonce
+            let user_transaction_nonce = self
+                .user_transaction_nonce
                 .get(&user_id)
                 .unwrap_or_default();
             let new_nonce = user_transaction_nonce.saturating_add(1);
@@ -359,7 +372,7 @@ mod cross_chain_transfer {
             Ok(())
         }
 
-         fn receive_usdt(&self, sender: AccountId, amount: Balance) -> Result<(), Error> {
+        fn receive_usdt(&self, sender: AccountId, amount: Balance) -> Result<(), Error> {
             build_call::<D9Environment>()
                 .call(self.usdt_contract)
                 .gas_limit(0)
@@ -368,13 +381,13 @@ mod cross_chain_transfer {
                         .push_arg(sender)
                         .push_arg(self.env().account_id())
                         .push_arg(amount)
-                        .push_arg([0u8])
+                        .push_arg([0u8]),
                 )
                 .returns::<Result<(), Error>>()
                 .invoke()
         }
 
-         fn send_usdt(&self, recipient: AccountId, amount: Balance) -> Result<(), Error> {
+        fn send_usdt(&self, recipient: AccountId, amount: Balance) -> Result<(), Error> {
             build_call::<D9Environment>()
                 .call(self.usdt_contract)
                 .gas_limit(0)
@@ -382,7 +395,7 @@ mod cross_chain_transfer {
                     ExecutionInput::new(Selector::new(selector_bytes!("PSP22::transfer")))
                         .push_arg(recipient)
                         .push_arg(amount)
-                        .push_arg([0u8])
+                        .push_arg([0u8]),
                 )
                 .returns::<Result<(), Error>>()
                 .invoke()
@@ -403,15 +416,14 @@ mod cross_chain_transfer {
         fn validate_usdt_balance(
             &self,
             account_id: AccountId,
-            amount: Balance
+            amount: Balance,
         ) -> Result<(), Error> {
             let usdt_balance = build_call::<D9Environment>()
                 .call(self.usdt_contract)
                 .gas_limit(0)
                 .exec_input(
-                    ExecutionInput::new(
-                        Selector::new(selector_bytes!("PSP22::balance_of"))
-                    ).push_arg(account_id)
+                    ExecutionInput::new(Selector::new(selector_bytes!("PSP22::balance_of")))
+                        .push_arg(account_id),
                 )
                 .returns::<Balance>()
                 .invoke();
@@ -424,7 +436,7 @@ mod cross_chain_transfer {
         pub fn validate_usdt_allowance(
             &self,
             owner: AccountId,
-            amount: Balance
+            amount: Balance,
         ) -> Result<(), Error> {
             let allowance = build_call::<D9Environment>()
                 .call(self.usdt_contract)
@@ -432,7 +444,7 @@ mod cross_chain_transfer {
                 .exec_input(
                     ExecutionInput::new(Selector::new(selector_bytes!("PSP22::allowance")))
                         .push_arg(owner)
-                        .push_arg(self.env().account_id())
+                        .push_arg(self.env().account_id()),
                 )
                 .returns::<Balance>()
                 .invoke();
@@ -479,8 +491,8 @@ mod cross_chain_transfer {
         fn it_works() {
             let mut cross_chain_transfer = CrossChainTransfer::new(AccountId::from([0x1; 32]));
             let address = cross_chain_transfer.bytes_to_account_id([
-                94, 211, 105, 27, 83, 160, 52, 54, 247, 62, 240, 54, 250, 98, 15, 240, 78, 47, 162, 143,
-                137, 234, 193, 167, 30, 39, 243, 143, 192, 126, 128, 40,
+                94, 211, 105, 27, 83, 160, 52, 54, 247, 62, 240, 54, 250, 98, 15, 240, 78, 47, 162,
+                143, 137, 234, 193, 167, 30, 39, 243, 143, 192, 126, 128, 40,
             ]);
 
             println!("address: {:?}", hex::encode(address));
@@ -500,7 +512,7 @@ mod cross_chain_transfer {
         use d9_usdt::d9_usdt::D9USDTRef;
         use d9_usdt::d9_usdt::D9USDT;
         /// A helper function used for calling contract messages.
-        use ink_e2e::{ account_id, build_message, AccountKeyring };
+        use ink_e2e::{account_id, build_message, AccountKeyring};
         /// The End-to-End test `Result` type.
         type E2EResult<T> = std::result::Result<T, Box<dyn std::error::Error>>;
 
@@ -510,38 +522,45 @@ mod cross_chain_transfer {
             let initial_supply: Balance = 100_000_000_000_000;
             let usdt_constructor = D9USDTRef::new(initial_supply);
             let usdt_address = client
-                .instantiate("d9_usdt", &ink_e2e::alice(), usdt_constructor, 0, None).await
-                .expect("failed to instantiate usdt").account_id;
+                .instantiate("d9_usdt", &ink_e2e::alice(), usdt_constructor, 0, None)
+                .await
+                .expect("failed to instantiate usdt")
+                .account_id;
 
-            let grant_allowance = build_message::<D9USDTRef>(contract.clone()).call(|usdt|
-                usdt.approve(user, contract, amount)
-            );
+            let grant_allowance = build_message::<D9USDTRef>(contract.clone())
+                .call(|usdt| usdt.approve(user, contract, amount));
             let call_result = client.call_dry_run(user, &grant_allowance, 0, None).await;
 
             let constructor = CrossChainTransferRef::new(usdt_address);
             let contract_account_id = client
-                .instantiate("cross_chain_transfer", &ink_e2e::alice(), constructor, 0, None).await
-                .expect("instantiate failed").account_id;
+                .instantiate(
+                    "cross_chain_transfer",
+                    &ink_e2e::alice(),
+                    constructor,
+                    0,
+                    None,
+                )
+                .await
+                .expect("instantiate failed")
+                .account_id;
 
             let d9_bytes = [
-                94, 211, 105, 27, 83, 160, 52, 54, 247, 62, 240, 54, 250, 98, 15, 240, 78, 47, 162, 143,
-                137, 234, 193, 167, 30, 39, 243, 143, 192, 126, 128, 40,
+                94, 211, 105, 27, 83, 160, 52, 54, 247, 62, 240, 54, 250, 98, 15, 240, 78, 47, 162,
+                143, 137, 234, 193, 167, 30, 39, 243, 143, 192, 126, 128, 40,
             ];
             let tron_bytes = [
                 41, 219, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 254, 117, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
             ];
             let send_amount = 10000;
             let commit_transaction = build_message::<CrossChainTransferRef>(
-                contract_account_id.clone()
-            ).call(|cross_chain_transfer| {
+                contract_account_id.clone(),
+            )
+            .call(|cross_chain_transfer| {
                 cross_chain_transfer.create_commit_transaction(d9_bytes, tron_bytes, send_amount)
             });
-            let call_result = client.call_dry_run(
-                &ink_e2e::alice(),
-                &commit_transaction,
-                0,
-                None
-            ).await;
+            let call_result = client
+                .call_dry_run(&ink_e2e::alice(), &commit_transaction, 0, None)
+                .await;
 
             Ok(())
         }

@@ -1,15 +1,33 @@
 [workspace]
 resolver = "2"
 members = [
-     "burn/d9-burn-common",
-     "burn/d9-burn-mining",
-     "main-pool",
-     "chain-extension",
-     "merchant-mining",
+     "burn/burn-common",
+     "burn/burn-mining",
+     "burn-rewards-vault",
+     "merchant-rewards-engine",
      "market-maker",
      "tokens/usdt",
-     "d9-test-utils",
-     "mining-pool",
+     "test-utils",
+     "rewards-aggregator",
      "node-reward",
      "cross-chain-transfer",
+     "d9-core",
+     "d9-core/chain-extension",
+     "d9-core/d9-environment",
+     "d9-core/d9-common-types",
+     "d9-core/prism",
+     "d9-core/safety",
+    "rewards-aggregator-v2/router",
+    "rewards-aggregator-v2/storage-core",
+    "rewards-aggregator-v2/pool-logic",
+    "rewards-aggregator-v2/merchant-logic",
+
 ]
+
+[workspace.dependencies]
+ink = { version = "4.3.0", default-features = false }
+ink_env = { version = "4.3.0", default-features = false }
+scale = { package = "parity-scale-codec", version = "3.6.5", default-features = false, features = ["derive"] }
+scale-info = { version = "2.10.0", default-features = false, features = ["derive"] }
+sp-arithmetic = { version = "19", default-features = false }
+substrate-fixed = { default-features = false, git = "https://github.com/encointer/substrate-fixed" }

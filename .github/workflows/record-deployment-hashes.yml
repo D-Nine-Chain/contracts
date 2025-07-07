@@ -1,0 +1,137 @@
+name: Record Deployment Hashes
+on:
+  push:
+    branches: [ main ]
+
+jobs:
+  record-hashes:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    
+    steps:
+      - uses: actions/checkout@v3
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          fetch-depth: 2  # Need previous commit
+          
+      - name: Set up Rust
+        uses: dtolnay/rust-toolchain@1.79.0
+        
+      - name: Cache cargo binaries
+        uses: actions/cache@v3
+        with:
+          path: ~/.cargo/bin
+          key: ${{ runner.os }}-cargo-bin-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-cargo-bin-
+        
+      - name: Install tools
+        run: |
+          # Check and install cargo-contract if not cached
+          if ! command -v cargo-contract &> /dev/null; then
+            cargo install cargo-contract --version 3.2.0 --locked
+          fi
+          sudo apt-get update && sudo apt-get install -y jq python3
+      
+      - name: Detect changed contracts
+        id: changes
+        run: |
+          # Get changed files between previous commit and current
+          CHANGED_FILES=$(git diff --name-only HEAD^ HEAD)
+          
+          # Find all contract directories that had changes
+          CHANGED_CONTRACTS=""
+          for file in $CHANGED_FILES; do
+            DIR=$(dirname "$file")
+            while [[ "$DIR" != "." && "$DIR" != "/" ]]; do
+              if [[ -f "$DIR/Cargo.toml" ]] && grep -q "ink.*=" "$DIR/Cargo.toml" 2>/dev/null; then
+                CONTRACT_NAME=$(basename "$DIR")
+                # Skip libraries and usdt
+                SKIP_PACKAGES="chain-extension d9-chain-extension d9-burn-common d9-test-utils usdt"
+                if [[ ! " $SKIP_PACKAGES " =~ " $CONTRACT_NAME " ]]; then
+                  if [[ ! " $CHANGED_CONTRACTS " =~ " $CONTRACT_NAME " ]]; then
+                    CHANGED_CONTRACTS="$CHANGED_CONTRACTS $CONTRACT_NAME"
+                  fi
+                fi
+                break
+              fi
+              DIR=$(dirname "$DIR")
+            done
+          done
+          
+          echo "contracts=$CHANGED_CONTRACTS" >> $GITHUB_OUTPUT
+          echo "Changed contracts: $CHANGED_CONTRACTS"
+          
+      - name: Build and record hashes
+        if: steps.changes.outputs.contracts != ''
+        run: |
+          # Initialize or load approvals file
+          if [ -f .github/deployment-hashes.json ]; then
+            cp .github/deployment-hashes.json hashes.json
+          else
+            echo '{}' > hashes.json
+          fi
+          
+          # Build each changed contract
+          for contract in ${{ steps.changes.outputs.contracts }}; do
+            echo "Building $contract..."
+            # Find the actual directory for the contract
+            CONTRACT_DIR=$(find . -name "Cargo.toml" -type f | xargs grep -l "name = \".*$contract" | head -1 | xargs dirname)
+            if [[ -z "$CONTRACT_DIR" ]]; then
+              echo "Warning: Could not find directory for contract $contract"
+              continue
+            fi
+            cd "$CONTRACT_DIR"
+            cargo contract build --release
+            
+            # Find the actual wasm file (might have different name than directory)
+            WASM_FILE=$(find target/ink -name "*.wasm" -type f | head -1)
+            if [[ -z "$WASM_FILE" ]]; then
+              echo "Warning: No wasm file found for $contract"
+              cd ..
+              continue
+            fi
+            
+            # Calculate hash using Python one-liner
+            HASH=$(python3 -c "import hashlib; print(hashlib.blake2b(open('$WASM_FILE', 'rb').read(), digest_size=32).hexdigest())")
+            
+            cd ..
+            
+            # Update hashes file
+            jq --arg contract "$contract" --arg hash "$HASH" \
+              --arg date "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+              --arg commit "${{ github.sha }}" \
+              '.[$contract] = {
+                "code_hash": $hash,
+                "commit": $commit,
+                "approved_at": $date,
+                "approved_by": "GitHub Actions"
+              }' hashes.json > tmp.json
+            mv tmp.json hashes.json
+          done
+          
+          mkdir -p .github
+          mv hashes.json .github/deployment-hashes.json
+      
+      - name: Commit deployment hashes
+        if: steps.changes.outputs.contracts != ''
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add .github/deployment-hashes.json
+          git commit -m "Record deployment hashes for: ${{ steps.changes.outputs.contracts }}" || exit 0
+          git push
+      
+      - name: Create deployment summary
+        if: steps.changes.outputs.contracts != ''
+        run: |
+          echo "## 🚀 Deployment Hashes Recorded" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "The following contracts have been built and their hashes recorded:" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          
+          cat .github/deployment-hashes.json | jq -r '
+            to_entries[] | 
+            "### \(.key)\n- **Hash**: `\(.value.code_hash)`\n- **Commit**: `\(.value.commit[0:7])`\n- **Date**: \(.value.approved_at)\n"
+          ' >> $GITHUB_STEP_SUMMARY

@@ -1,8 +1,8 @@
 {
   "source": {
-    "hash": "0x51db8128f6fdf52ba90763e498a9b03b60c3a026b681dcba5657e0ee3f900e52",
+    "hash": "0x6fefe9cb2b276189e74e254178486b68f2c56f34b6ca006ef973156d5d916d4b",
     "language": "ink! 4.3.0",
-    "compiler": "rustc 1.76.0",
+    "compiler": "rustc 1.82.0",
     "build_info": {
       "build_mode": "Release",
       "cargo_contract_version": "3.2.0",
@@ -15,7 +15,7 @@
   },
   "contract": {
     "name": "mining_pool",
-    "version": "0.2.0",
+    "version": "1.1.0",
     "authors": [
       "D9"
     ]
@@ -62,9 +62,7 @@
           }
         ],
         "default": false,
-        "docs": [
-          "Constructor that initializes the `bool` value to the given `init_value`."
-        ],
+        "docs": [],
         "label": "new",
         "payable": false,
         "returnType": {
@@ -101,20 +99,20 @@
         "displayName": [
           "ChainExtension"
         ],
-        "type": 16
+        "type": 18
       },
       "hash": {
         "displayName": [
           "Hash"
         ],
-        "type": 14
+        "type": 16
       },
       "maxEventTopics": 4,
       "timestamp": {
         "displayName": [
           "Timestamp"
         ],
-        "type": 15
+        "type": 17
       }
     },
     "events": [],
@@ -141,41 +139,6 @@
           "type": 8
         },
         "selector": "0x71ebcde6"
-      },
-      {
-        "args": [
-          {
-            "label": "account_id",
-            "type": {
-              "displayName": [
-                "AccountId"
-              ],
-              "type": 0
-            }
-          },
-          {
-            "label": "amount",
-            "type": {
-              "displayName": [
-                "Balance"
-              ],
-              "type": 3
-            }
-          }
-        ],
-        "default": false,
-        "docs": [],
-        "label": "pay_node_reward",
-        "mutates": true,
-        "payable": false,
-        "returnType": {
-          "displayName": [
-            "ink",
-            "MessageResult"
-          ],
-          "type": 9
-        },
-        "selector": "0x2f0dd006"
       },
       {
         "args": [],
@@ -220,6 +183,38 @@
         "selector": "0x91894472"
       },
       {
+        "args": [],
+        "default": false,
+        "docs": [],
+        "label": "get_total_volume",
+        "mutates": false,
+        "payable": false,
+        "returnType": {
+          "displayName": [
+            "ink",
+            "MessageResult"
+          ],
+          "type": 8
+        },
+        "selector": "0xe88330b2"
+      },
+      {
+        "args": [],
+        "default": false,
+        "docs": [],
+        "label": "get_price_protection_info",
+        "mutates": false,
+        "payable": false,
+        "returnType": {
+          "displayName": [
+            "ink",
+            "MessageResult"
+          ],
+          "type": 9
+        },
+        "selector": "0x1346ae32"
+      },
+      {
         "args": [
           {
             "label": "session_index",
@@ -241,9 +236,44 @@
             "ink",
             "MessageResult"
           ],
-          "type": 12
+          "type": 11
         },
         "selector": "0x8a1783cd"
+      },
+      {
+        "args": [
+          {
+            "label": "account_id",
+            "type": {
+              "displayName": [
+                "AccountId"
+              ],
+              "type": 0
+            }
+          },
+          {
+            "label": "amount",
+            "type": {
+              "displayName": [
+                "Balance"
+              ],
+              "type": 3
+            }
+          }
+        ],
+        "default": false,
+        "docs": [],
+        "label": "pay_node_reward",
+        "mutates": true,
+        "payable": false,
+        "returnType": {
+          "displayName": [
+            "ink",
+            "MessageResult"
+          ],
+          "type": 14
+        },
+        "selector": "0x2f0dd006"
       },
       {
         "args": [
@@ -267,25 +297,9 @@
             "ink",
             "MessageResult"
           ],
-          "type": 9
+          "type": 14
         },
         "selector": "0x7df305eb"
-      },
-      {
-        "args": [],
-        "default": false,
-        "docs": [],
-        "label": "get_total_volume",
-        "mutates": false,
-        "payable": false,
-        "returnType": {
-          "displayName": [
-            "ink",
-            "MessageResult"
-          ],
-          "type": 8
-        },
-        "selector": "0xe88330b2"
       },
       {
         "args": [
@@ -309,7 +323,7 @@
             "ink",
             "MessageResult"
           ],
-          "type": 9
+          "type": 14
         },
         "selector": "0xcbdfeaf9"
       },
@@ -337,14 +351,14 @@
         "default": false,
         "docs": [],
         "label": "merchant_user_redeem_d9",
-        "mutates": false,
+        "mutates": true,
         "payable": false,
         "returnType": {
           "displayName": [
             "ink",
             "MessageResult"
           ],
-          "type": 12
+          "type": 11
         },
         "selector": "0x152062a1"
       },
@@ -370,9 +384,87 @@
             "ink",
             "MessageResult"
           ],
-          "type": 9
+          "type": 14
         },
         "selector": "0x1221b207"
+      },
+      {
+        "args": [
+          {
+            "label": "node_reward_contract",
+            "type": {
+              "displayName": [
+                "AccountId"
+              ],
+              "type": 0
+            }
+          }
+        ],
+        "default": false,
+        "docs": [],
+        "label": "change_node_reward_contract",
+        "mutates": true,
+        "payable": false,
+        "returnType": {
+          "displayName": [
+            "ink",
+            "MessageResult"
+          ],
+          "type": 14
+        },
+        "selector": "0x5cfb2c63"
+      },
+      {
+        "args": [
+          {
+            "label": "amm_contract",
+            "type": {
+              "displayName": [
+                "AccountId"
+              ],
+              "type": 0
+            }
+          }
+        ],
+        "default": false,
+        "docs": [],
+        "label": "change_amm_contract",
+        "mutates": true,
+        "payable": false,
+        "returnType": {
+          "displayName": [
+            "ink",
+            "MessageResult"
+          ],
+          "type": 14
+        },
+        "selector": "0x0db11b82"
+      },
+      {
+        "args": [
+          {
+            "label": "main_contract",
+            "type": {
+              "displayName": [
+                "AccountId"
+              ],
+              "type": 0
+            }
+          }
+        ],
+        "default": false,
+        "docs": [],
+        "label": "change_main_contract",
+        "mutates": true,
+        "payable": false,
+        "returnType": {
+          "displayName": [
+            "ink",
+            "MessageResult"
+          ],
+          "type": 14
+        },
+        "selector": "0xbb530edc"
       },
       {
         "args": [
@@ -405,87 +497,9 @@
             "ink",
             "MessageResult"
           ],
-          "type": 9
+          "type": 14
         },
         "selector": "0x651d5be0"
-      },
-      {
-        "args": [
-          {
-            "label": "node_reward_contract",
-            "type": {
-              "displayName": [
-                "AccountId"
-              ],
-              "type": 0
-            }
-          }
-        ],
-        "default": false,
-        "docs": [],
-        "label": "change_node_reward_contract",
-        "mutates": true,
-        "payable": false,
-        "returnType": {
-          "displayName": [
-            "ink",
-            "MessageResult"
-          ],
-          "type": 9
-        },
-        "selector": "0x5cfb2c63"
-      },
-      {
-        "args": [
-          {
-            "label": "amm_contract",
-            "type": {
-              "displayName": [
-                "AccountId"
-              ],
-              "type": 0
-            }
-          }
-        ],
-        "default": false,
-        "docs": [],
-        "label": "change_amm_contract",
-        "mutates": true,
-        "payable": false,
-        "returnType": {
-          "displayName": [
-            "ink",
-            "MessageResult"
-          ],
-          "type": 9
-        },
-        "selector": "0x0db11b82"
-      },
-      {
-        "args": [
-          {
-            "label": "main_contract",
-            "type": {
-              "displayName": [
-                "AccountId"
-              ],
-              "type": 0
-            }
-          }
-        ],
-        "default": false,
-        "docs": [],
-        "label": "change_main_contract",
-        "mutates": true,
-        "payable": false,
-        "returnType": {
-          "displayName": [
-            "ink",
-            "MessageResult"
-          ],
-          "type": 9
-        },
-        "selector": "0xbb530edc"
       },
       {
         "args": [
@@ -824,12 +838,23 @@
       "id": 10,
       "type": {
         "def": {
+          "tuple": [
+            3,
+            3
+          ]
+        }
+      }
+    },
+    {
+      "id": 11,
+      "type": {
+        "def": {
           "variant": {
             "variants": [
               {
                 "fields": [
                   {
-                    "type": 6
+                    "type": 12
                   }
                 ],
                 "index": 0,
@@ -838,7 +863,7 @@
               {
                 "fields": [
                   {
-                    "type": 11
+                    "type": 7
                   }
                 ],
                 "index": 1,
@@ -850,11 +875,11 @@
         "params": [
           {
             "name": "T",
-            "type": 6
+            "type": 12
           },
           {
             "name": "E",
-            "type": 11
+            "type": 7
           }
         ],
         "path": [
@@ -863,7 +888,49 @@
       }
     },
     {
-      "id": 11,
+      "id": 12,
+      "type": {
+        "def": {
+          "variant": {
+            "variants": [
+              {
+                "fields": [
+                  {
+                    "type": 3
+                  }
+                ],
+                "index": 0,
+                "name": "Ok"
+              },
+              {
+                "fields": [
+                  {
+                    "type": 13
+                  }
+                ],
+                "index": 1,
+                "name": "Err"
+              }
+            ]
+          }
+        },
+        "params": [
+          {
+            "name": "T",
+            "type": 3
+          },
+          {
+            "name": "E",
+            "type": 13
+          }
+        ],
+        "path": [
+          "Result"
+        ]
+      }
+    },
+    {
+      "id": 13,
       "type": {
         "def": {
           "variant": {
@@ -892,7 +959,11 @@
               },
               {
                 "index": 4,
-                "name": "ErrorAddingVotes"
+                "name": "AddingVotes"
+              },
+              {
+                "index": 5,
+                "name": "RedeemableUSDTZero"
               }
             ]
           }
@@ -905,7 +976,7 @@
       }
     },
     {
-      "id": 12,
+      "id": 14,
       "type": {
         "def": {
           "variant": {
@@ -913,7 +984,7 @@
               {
                 "fields": [
                   {
-                    "type": 13
+                    "type": 15
                   }
                 ],
                 "index": 0,
@@ -934,7 +1005,7 @@
         "params": [
           {
             "name": "T",
-            "type": 13
+            "type": 15
           },
           {
             "name": "E",
@@ -947,7 +1018,7 @@
       }
     },
     {
-      "id": 13,
+      "id": 15,
       "type": {
         "def": {
           "variant": {
@@ -955,7 +1026,7 @@
               {
                 "fields": [
                   {
-                    "type": 3
+                    "type": 6
                   }
                 ],
                 "index": 0,
@@ -964,7 +1035,7 @@
               {
                 "fields": [
                   {
-                    "type": 11
+                    "type": 13
                   }
                 ],
                 "index": 1,
@@ -976,11 +1047,11 @@
         "params": [
           {
             "name": "T",
-            "type": 3
+            "type": 6
           },
           {
             "name": "E",
-            "type": 11
+            "type": 13
           }
         ],
         "path": [
@@ -989,7 +1060,7 @@
       }
     },
     {
-      "id": 14,
+      "id": 16,
       "type": {
         "def": {
           "composite": {
@@ -1009,7 +1080,7 @@
       }
     },
     {
-      "id": 15,
+      "id": 17,
       "type": {
         "def": {
           "primitive": "u64"
@@ -1017,7 +1088,7 @@
       }
     },
     {
-      "id": 16,
+      "id": 18,
       "type": {
         "def": {
           "variant": {}

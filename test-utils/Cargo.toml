@@ -1,0 +1,26 @@
+[package]
+name = "test-utils"
+version = "0.1.0"
+authors = ["D9"]
+edition = "2021"
+
+
+[dependencies]
+ink.workspace = true
+
+chain-extension = { version = "^1.0.0", path = "../d9-core/chain-extension", default-features = false }
+scale.workspace = true
+sp-arithmetic.workspace = true
+scale-info = { workspace = true, optional = true }
+
+[dev-dependencies]
+ink_e2e = "4.2.0"
+
+[lib]
+path = "lib.rs"
+
+[features]
+default = ["std"]
+std = ["ink/std", "scale/std", "scale-info/std", "chain-extension/std"]
+ink-as-dependency = []
+e2e-tests = []

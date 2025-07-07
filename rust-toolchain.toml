@@ -1,0 +1,5 @@
+[toolchain]
+# Lock to the last known working version
+channel = "1.82.0"
+components = ["rustfmt", "clippy", "rust-src"]
+targets = ["wasm32-unknown-unknown"]

@@ -1,0 +1,20 @@
+[package]
+name = "d9-common-types"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+ink.workspace = true
+scale.workspace = true
+scale-info = { workspace = true, optional = true }
+
+[lib]
+path = "lib.rs"
+
+[features]
+default = ["std"]
+std = [
+    "ink/std",
+    "scale/std",
+    "scale-info/std",
+]

@@ -1,0 +1,171 @@
+name: PR Contract Verification
+on:
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  detect-changes:
+    runs-on: ubuntu-latest
+    outputs:
+      contracts: ${{ steps.detect.outputs.contracts }}
+    steps:
+      - uses: actions/checkout@v3
+        with:
+          fetch-depth: 0
+      
+      - name: Detect changed contracts
+        id: detect
+        run: |
+          # Get all changed files
+          CHANGED_FILES=$(git diff --name-only origin/${{ github.base_ref }}...HEAD)
+          
+          # Find all Cargo.toml files that indicate contracts
+          CONTRACTS=""
+          for file in $CHANGED_FILES; do
+            # Check if it's in a contract directory (has Cargo.toml with ink dependency)
+            DIR=$(dirname "$file")
+            while [[ "$DIR" != "." && "$DIR" != "/" ]]; do
+              if [[ -f "$DIR/Cargo.toml" ]] && grep -q "ink.*=" "$DIR/Cargo.toml" 2>/dev/null; then
+                # Extract just the contract directory name
+                CONTRACT_NAME=$(basename "$DIR")
+                
+                # Skip libraries and usdt
+                if [[ "$CONTRACT_NAME" == "d9-burn-common" ]] || \
+                   [[ "$CONTRACT_NAME" == "chain-extension" ]] || \
+                   [[ "$CONTRACT_NAME" == "d9-chain-extension" ]] || \
+                   [[ "$CONTRACT_NAME" == "d9-test-utils" ]] || \
+                   [[ "$CONTRACT_NAME" == "usdt" ]]; then
+                  break
+                fi
+                
+                # Avoid duplicates and build space-separated list
+                if [[ ! " $CONTRACTS " =~ " $CONTRACT_NAME " ]]; then
+                  if [[ -z "$CONTRACTS" ]]; then
+                    CONTRACTS="$CONTRACT_NAME"
+                  else
+                    CONTRACTS="$CONTRACTS $CONTRACT_NAME"
+                  fi
+                fi
+                break
+              fi
+              DIR=$(dirname "$DIR")
+            done
+          done
+          
+          # Convert to JSON array for matrix
+          if [[ -n "$CONTRACTS" ]]; then
+            # Convert space-separated list to JSON array more safely
+            JSON_ARRAY=$(echo "$CONTRACTS" | tr ' ' '\n' | grep -v '^$' | jq -R . | jq -s -c .)
+            echo "contracts=${JSON_ARRAY}" >> $GITHUB_OUTPUT
+            echo "Found changed contracts: $CONTRACTS"
+          else
+            echo "contracts=[]" >> $GITHUB_OUTPUT
+            echo "No contract changes detected"
+          fi
+
+  verify-contracts:
+    needs: detect-changes
+    if: ${{ needs.detect-changes.outputs.contracts != '[]' }}
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        contract: ${{ fromJson(needs.detect-changes.outputs.contracts) }}
+    
+    steps:
+      - uses: actions/checkout@v3
+        with:
+          fetch-depth: 0  # Need full history
+      
+      - name: Set up Rust
+        uses: dtolnay/rust-toolchain@1.79.0
+        
+      - name: Cache cargo binaries
+        uses: actions/cache@v3
+        with:
+          path: ~/.cargo/bin
+          key: ${{ runner.os }}-cargo-bin-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-cargo-bin-
+        
+      - name: Install tools
+        run: |
+          # Check and install cargo-contract if not cached
+          if ! command -v cargo-contract &> /dev/null; then
+            cargo install cargo-contract --version 3.2.0 --locked
+          fi
+          
+          sudo apt-get update && sudo apt-get install -y python3
+          
+          # Check and install b2sum if not cached
+          if ! command -v b2sum &> /dev/null; then
+            cargo install b2sum
+          fi
+          
+      - name: Check storage changes
+        run: |
+          # Compare storage with base branch
+          echo "Checking storage for ${{ matrix.contract }}..."
+          python3 scripts/verify_storage.py check ${{ matrix.contract }} || {
+            echo "::warning::Storage structure changed in ${{ matrix.contract }}"
+          }
+          
+      - name: Build and test
+        working-directory: ${{ matrix.contract }}
+        run: |
+          cargo check --all-features
+          cargo test
+          cargo clippy -- -D warnings
+          cargo contract build --release
+          
+      - name: Calculate code hash
+        id: codehash
+        working-directory: ${{ matrix.contract }}
+        run: |
+          # Calculate hash - try b2sum first, fallback to sha256sum
+          if command -v b2sum &> /dev/null; then
+            HASH=$(b2sum -l 256 target/ink/*.wasm | cut -d' ' -f1)
+          else
+            HASH=$(sha256sum target/ink/*.wasm | cut -d' ' -f1)
+          fi
+          echo "hash=$HASH" >> $GITHUB_OUTPUT
+          echo "Contract: ${{ matrix.contract }}"
+          echo "Code Hash: $HASH"
+          
+      - name: Post results as PR comment
+        uses: actions/github-script@v6
+        if: github.event_name == 'pull_request'
+        with:
+          script: |
+            const contract = '${{ matrix.contract }}';
+            const hash = '${{ steps.codehash.outputs.hash }}';
+            const body = `### ✅ ${contract} Verification Results\n\n**Code Hash:** \`${hash}\`\n**Status:** All checks passed`;
+            
+            // Find existing comment
+            const comments = await github.rest.issues.listComments({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+            });
+            
+            const botComment = comments.data.find(comment => 
+              comment.user.type === 'Bot' && 
+              comment.body.includes(`### ✅ ${contract} Verification Results`)
+            );
+            
+            if (botComment) {
+              // Update existing comment
+              await github.rest.issues.updateComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                comment_id: botComment.id,
+                body: body
+              });
+            } else {
+              // Create new comment
+              await github.rest.issues.createComment({
+                issue_number: context.issue.number,
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                body: body
+              });
+            }

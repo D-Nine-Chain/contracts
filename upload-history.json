@@ -1,0 +1,62 @@
+{
+  "main-pool": [
+    {
+      "timestamp": "2025-07-02T00:00:00",
+      "network": "mainnet",
+      "branch": "main",
+      "code_hash": "0x24f4e371417268cbefeb022da8f9cd7f550a8706c1741f10c565f9098e4a31e2",
+      "contract_address": "wRGYShktZsxtKwXCCzqtLW7P1a5K2qDsaXEcRWxVYKGwH7d",
+      "upload_only": false,
+      "deployed_by": "initial",
+      "git_commit": "initial"
+    }
+  ],
+  "merchant-mining": [
+    {
+      "timestamp": "2025-07-02T00:00:00",
+      "network": "mainnet",
+      "branch": "main",
+      "code_hash": "0x92a02343d1bf3f6d35d44714d823522b8efa5a7fe6263a1da26c53a6c952a981",
+      "contract_address": "xjyLYnZBRhYYjUKjCp8UiHnmcjHmkPfRSBxTiLLMoEwtzwp",
+      "upload_only": false,
+      "deployed_by": "initial",
+      "git_commit": "initial"
+    }
+  ],
+  "market-maker": [
+    {
+      "timestamp": "2025-07-02T00:00:00",
+      "network": "mainnet",
+      "branch": "main",
+      "code_hash": "0xd215283db7fe7c14361e57395565d8fccc14b7a1d09b520ee7d209cb5bebdfc6",
+      "contract_address": "z8keEeLwjZFK5NS5PF6xYwTHEbm7jwpH4gBYB1JV6pDTtWg",
+      "upload_only": false,
+      "deployed_by": "initial",
+      "git_commit": "initial"
+    }
+  ],
+  "mining-pool": [
+    {
+      "timestamp": "2025-07-02T00:00:00",
+      "network": "mainnet",
+      "branch": "main",
+      "code_hash": "0x51db8128f6fdf52ba90763e498a9b03b60c3a026b681dcba5657e0ee3f900e52",
+      "contract_address": "zXB3VPHrnb9pzfJweLstBfmn5Xq3dEAFAbKKxTsQZg1entq",
+      "upload_only": false,
+      "deployed_by": "initial",
+      "git_commit": "initial"
+    }
+  ],
+  "node-reward": [
+    {
+      "timestamp": "2025-07-02T00:00:00",
+      "network": "mainnet",
+      "branch": "main",
+      "code_hash": "0xa80935f14217dc34190e6b5b6e013ca7f60c446fb2d279733f0677f016f52861",
+      "contract_address": "xqDsmMNZsCprGkjG6JPCQYysvdBs5GvudLzkXt73BbysX6D",
+      "upload_only": false,
+      "deployed_by": "initial",
+      "git_commit": "initial"
+    }
+  ]
+}

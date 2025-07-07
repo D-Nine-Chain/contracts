@@ -2,7 +2,7 @@
 /// calculate the share of session reward that is due to a particular node
 /// session rewards are calculated as 10 percent of the accumulation of total burned tokens in the main pool
 /// and total of d9 tokens processed by the merchant contract
-pub use d9_chain_extension::D9Environment;
+pub use chain_extension::D9Environment;
 #[ink::contract(env = D9Environment)]
 mod node_reward {
     use super::*;
@@ -145,7 +145,7 @@ mod node_reward {
         #[ink(message)]
         pub fn withdraw_reward(&mut self, node_id: AccountId) -> Result<(), Error> {
             let caller = self.env().caller();
-            let _ = self.validate_withdraw(node_id, caller)?;
+            self.validate_withdraw(node_id, caller)?;
             let reward_balance = self.node_reward.get(&node_id).unwrap_or(0);
             if reward_balance == 0 {
                 return Err(Error::NothingToWithdraw);
@@ -154,7 +154,7 @@ mod node_reward {
             if payment_request_result.is_err() {
                 return Err(Error::ErrorIssuingPayment);
             }
-            let _ = self.deduct_node_reward(node_id)?;
+            self.deduct_node_reward(node_id)?;
             self.env().emit_event(NodeRewardPaid {
                 node: node_id,
                 receiver: caller,
@@ -225,9 +225,9 @@ mod node_reward {
 
                 if node_and_votes.1 >= self.vote_limit {
                     let node_id: AccountId = node_and_votes.0;
-                    let _ = self.credit_node_reward(node_id, node_share)?;
+                    self.credit_node_reward(node_id, node_share)?;
                     total_paid_out = total_paid_out.saturating_add(node_share);
-                    let _ = self.deduct_from_reward_pool(node_share);
+                    self.deduct_from_reward_pool(node_share)?;
                 }
             }
             self.session_rewards.insert(last_session, &(reward_pool, total_paid_out));

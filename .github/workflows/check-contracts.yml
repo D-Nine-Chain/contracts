@@ -1,48 +1,84 @@
-# name: Check Contracts
+name: Check Contracts
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
 
-# on:
-#   push:
-#     branches:
-#       - main
-#   pull_request:
-#     branches:
-#       - main
+jobs:
+  check-contracts:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v3  # Updated to v3
 
-# jobs:
-#   check-contracts:
-#     runs-on: ubuntu-latest
+      - name: Set up Rust
+        uses: dtolnay/rust-toolchain@1.79.0
+        with:
+          components: rust-src
 
-#     steps:
-#       - name: Checkout repository
-#         uses: actions/checkout@v2
+      - name: Cache cargo registry
+        uses: actions/cache@v3
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
 
-#       - name: Set up Rust
-#         uses: actions-rs/toolchain@v1
-#         with:
-#           toolchain: stable
-#           profile: minimal
-#           override: true
-#           default: true
+      - name: Install cargo-contract
+        run: |
+          # Check if already installed
+          if ! command -v cargo-contract &> /dev/null; then
+            cargo install cargo-contract --version 3.2.0 --locked
+          fi
 
-#       - name: Install cargo-contract
-#         run: |
-#           cargo install cargo-contract --version "^3.2.0" --force
+      - name: Cache cargo binaries
+        uses: actions/cache@v3
+        with:
+          path: ~/.cargo/bin
+          key: ${{ runner.os }}-cargo-bin-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-cargo-bin-
 
-#       - name: Install jq
-#         run: sudo apt-get install -y jq
+      - name: Install tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y jq
+          
+          # Check and install b2sum if not cached
+          if ! command -v b2sum &> /dev/null; then
+            cargo install b2sum
+          fi
 
-#       - name: Get workspace members
-#         id: get-members
-#         run: |
-#           members=$(cargo metadata --no-deps --format-version 1 | jq -r '.packages | map(select(.source == null)) | map(.name) | .[]')
-#           echo "::set-output name=members::${members}"
+      - name: Get workspace members
+        id: get-members
+        run: |
+          # Get package info as JSON array with name and manifest path
+          packages=$(cargo metadata --no-deps --format-version 1 | jq -c '.packages | map(select(.source == null)) | map({name: .name, manifest_path: .manifest_path})')
+          echo "packages=${packages}" >> $GITHUB_OUTPUT
 
-#       - name: Check contracts
-#         run: |
-#           members=${{ steps.get-members.outputs.members }}
-#           for member in $members; do
-#             if [[ "$member" != "chain-extension" ]]; then
-#               echo "Checking $member..."
-#               cargo contract check --manifest-path "$member/Cargo.toml"
-#             fi
-#           done
+      - name: Check contracts
+        run: |
+          set -e  # Exit on error
+          packages='${{ steps.get-members.outputs.packages }}'
+          # List of packages to skip (libraries and usdt)
+          SKIP_PACKAGES="chain-extension d9-chain-extension d9-burn-common d9-test-utils d9_usdt"
+          
+          # Parse JSON and iterate
+          echo "$packages" | jq -c '.[]' | while read -r package; do
+            name=$(echo "$package" | jq -r '.name')
+            manifest_path=$(echo "$package" | jq -r '.manifest_path')
+            
+            # Skip if it's in the skip list
+            if [[ " $SKIP_PACKAGES " =~ " $name " ]]; then
+              echo "Skipping package: $name"
+              continue
+            fi
+            
+            echo "::group::Checking $name"
+            cargo contract check --manifest-path "$manifest_path"
+            echo "::endgroup::"
+          done

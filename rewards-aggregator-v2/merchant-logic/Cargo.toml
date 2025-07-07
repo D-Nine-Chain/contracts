@@ -1,0 +1,28 @@
+[package]
+name = "merchant-operations-logic"
+version = "2.0.0"
+authors = ["D9"]
+edition = "2021"
+
+[dependencies]
+chain-extension = { version = "^1.0.0", path = "../../d9-core/chain-extension", default-features = false }
+ink.workspace = true
+scale.workspace = true
+scale-info = { workspace = true, optional = true }
+prism = { version = "0.1.0", path = "../../d9-core/prism", default-features = false }
+safety = { version = "0.1.0", path = "../../d9-core/safety", default-features = false }
+
+[lib]
+path = "lib.rs"
+
+[features]
+default = ["std"]
+std = [
+    "ink/std",
+    "scale/std",
+    "scale-info/std",
+    "chain-extension/std",
+    "prism/std",
+    "safety/std",
+]
+ink-as-dependency = []

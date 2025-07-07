@@ -1,0 +1,28 @@
+[package]
+name = "burn-rewards-vault"
+version = "2.0.0"
+authors = ["D9"]
+edition = "2021"
+# [profile.dev]
+# overflow-checks = false
+
+[dependencies]
+ink.workspace = true
+burn-common = { version = "0.1.0", path = "../burn/burn-common", default-features = false }
+scale.workspace = true
+scale-info = { workspace = true, optional = true }
+sp-arithmetic.workspace = true
+
+[dev-dependencies]
+ink_e2e = "4.2.0"
+burn-mining = { version = "0.1.0", path = "../burn/burn-mining", default-features = false }
+
+[lib]
+path = "lib.rs"
+
+
+[features]
+default = ["std"]
+std = ["ink/std", "scale/std", "scale-info/std", "burn-common/std"]
+ink-as-dependency = []
+e2e-tests = []

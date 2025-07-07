@@ -1,0 +1,31 @@
+[package]
+name = "chain-extension"
+version = "1.0.0"
+authors = ["D9"]
+edition = "2021"
+
+[dependencies]
+ink.workspace = true
+ink_env.workspace = true
+scale.workspace = true
+scale-info.workspace = true
+sp-arithmetic.workspace = true
+d9-environment = { path = "../d9-environment", default-features = false }
+d9-common-types = { path = "../d9-common-types", default-features = false }
+# sp-staking = { version = "4.0.0-dev", default-features = false, git = "https://github.com/paritytech/substrate.git", branch = "polkadot-v0.9.42" }
+[lib]
+path = "lib.rs"
+
+[features]
+default = ["std"]
+std = [
+    "ink/std",
+    "scale/std",
+    "scale-info/std",
+    "ink_env/std",
+    "sp-arithmetic/std",
+    "d9-environment/std",
+    "d9-common-types/std",
+]
+# "sp-staking/std",
+ink-as-dependency = []

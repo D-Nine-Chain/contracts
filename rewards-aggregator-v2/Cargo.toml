@@ -1,0 +1,8 @@
+[workspace]
+resolver = "2"
+members = [
+    "router",
+    "storage-core", 
+    "pool-logic",
+    "merchant-logic",
+]

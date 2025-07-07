@@ -1,0 +1,30 @@
+[package]
+name = "burn-mining"
+version = "0.1.0"
+authors = ["D9"]
+edition = "2021"
+# [profile.release]
+[dependencies]
+ink.workspace = true
+burn-common = { version = "0.1.0", path = "../burn-common", default-features = false }
+scale.workspace = true
+scale-info = { workspace = true, optional = true }
+sp-arithmetic.workspace = true
+
+[dev-dependencies]
+ink_e2e = "4.2.0"
+
+[lib]
+path = "lib.rs"
+
+[features]
+default = ["std"]
+std = [
+   "ink/std",
+   "scale/std",
+   "scale-info/std",
+   "burn-common/std",
+   "sp-arithmetic/std",
+]
+ink-as-dependency = []
+e2e-tests = []

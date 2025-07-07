@@ -1,0 +1,35 @@
+[package]
+name = "merchant-rewards-engine"
+version = "1.5.1"
+authors = ["D9"]
+edition = "2021"
+
+# [profile.release]
+# overflow-checks = false
+# [profile.dev]
+# overflow-checks = false
+
+[dependencies]
+ink.workspace = true
+chain-extension = { version = "^1.0.0", path = "../d9-core/chain-extension", default-features = false }
+scale.workspace = true
+sp-arithmetic.workspace = true
+scale-info = { workspace = true, optional = true }
+substrate-fixed.workspace = true
+[dev-dependencies]
+ink_e2e = "4.2.0"
+rewards-aggregator = { version = "^1.0.0", path = "../rewards-aggregator", default-features = false }
+[lib]
+path = "lib.rs"
+
+[features]
+default = ["std"]
+std = [
+    "ink/std",
+    "scale/std",
+    "scale-info/std",
+    "chain-extension/std",
+    "substrate-fixed/std",
+]
+ink-as-dependency = []
+e2e-tests = []

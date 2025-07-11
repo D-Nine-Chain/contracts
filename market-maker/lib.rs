@@ -19,6 +19,10 @@ mod market_maker {
         usdt_contract: AccountId,
         /// Perbill::from_rational(fee_numerator, fee_denominator)
         fee_percent: u32,
+        /// DEPRECATED - kept for storage compatibility. Not used in new AMM formula
+        /// In the old implementation, this tracked accumulated fees separately.
+        /// The new implementation uses Uniswap V2 style where fees are implicit in reserves.
+        fee_total: Balance,
         ///represents numerator of a percent
         liquidity_tolerance_percent: u32,
         /// providers of contract liquidity
@@ -119,6 +123,7 @@ mod market_maker {
                 admin: Self::env().caller(),
                 usdt_contract,
                 fee_percent,
+                fee_total: Default::default(), // Deprecated but kept for storage compatibility
                 liquidity_tolerance_percent,
                 liquidity_providers: Default::default(),
                 total_lp_tokens: Default::default(),

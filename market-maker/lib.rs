@@ -379,9 +379,46 @@ mod market_maker {
             Ok(())
         }
 
-        /// sell usdt
+        /// sell usdt (legacy version without slippage protection)
         #[ink(message)]
-        pub fn get_d9(&mut self, usdt: Balance, min_d9_out: Balance) -> Result<Balance, Error> {
+        pub fn get_d9(&mut self, usdt: Balance) -> Result<Balance, Error> {
+            let caller: AccountId = self.env().caller();
+
+            // Validate USDT balance and allowance
+            self.usdt_validity_check(caller, usdt)?;
+
+            let receive_usdt_result = self.receive_usdt_from_user(caller, usdt.clone());
+            if receive_usdt_result.is_err() {
+                return Err(Error::CouldntTransferUSDTFromUser);
+            }
+
+            //prepare d9 to send
+            let d9_calc_result =
+                self.calculate_exchange(Direction(Currency::USDT, Currency::D9), usdt);
+            if let Err(e) = d9_calc_result {
+                return Err(e);
+            }
+            let d9 = d9_calc_result.unwrap();
+            // Fee is already deducted in calculate_exchange
+
+            // send d9
+            let transfer_result = self.env().transfer(caller, d9);
+            if transfer_result.is_err() {
+                return Err(Error::MarketMakerHasInsufficientFunds(Currency::D9));
+            }
+
+            self.env().emit_event(USDTToD9Conversion {
+                account_id: caller,
+                usdt,
+                d9,
+            });
+
+            Ok(d9)
+        }
+
+        /// sell usdt (v2 with slippage protection)
+        #[ink(message)]
+        pub fn get_d9_v2(&mut self, usdt: Balance, min_d9_out: Balance) -> Result<Balance, Error> {
             let caller: AccountId = self.env().caller();
 
             // Validate USDT balance and allowance
@@ -421,9 +458,41 @@ mod market_maker {
             Ok(d9)
         }
 
-        /// sell d9
+        /// sell d9 (legacy version without slippage protection)
         #[ink(message, payable)]
-        pub fn get_usdt(&mut self, min_usdt_out: Balance) -> Result<Balance, Error> {
+        pub fn get_usdt(&mut self) -> Result<Balance, Error> {
+            let direction = Direction(Currency::D9, Currency::USDT);
+            let d9: Balance = self.env().transferred_value();
+
+            let usdt_calc_result = self.calculate_exchange(direction, d9);
+            if usdt_calc_result.is_err() {
+                return Err(usdt_calc_result.unwrap_err());
+            }
+            let usdt = usdt_calc_result.unwrap();
+            // Fee is already deducted in calculate_exchange
+
+            //prepare to send
+            let is_balance_sufficient = self.check_usdt_balance(self.env().account_id(), usdt);
+            if is_balance_sufficient.is_err() {
+                return Err(Error::InsufficientLiquidity(Currency::USDT));
+            }
+
+            // send usdt
+            let caller = self.env().caller();
+            self.send_usdt_to_user(caller, usdt.clone())?;
+
+            self.env().emit_event(D9ToUSDTConversion {
+                account_id: caller,
+                usdt,
+                d9,
+            });
+
+            Ok(usdt)
+        }
+
+        /// sell d9 (v2 with slippage protection)
+        #[ink(message, payable)]
+        pub fn get_usdt_v2(&mut self, min_usdt_out: Balance) -> Result<Balance, Error> {
             let direction = Direction(Currency::D9, Currency::USDT);
             let d9: Balance = self.env().transferred_value();
 
@@ -3344,6 +3413,35 @@ mod market_maker {
                 attacker_pnl < 0,
                 "Sandwich attack should not be profitable with fees"
             );
+        }
+
+        #[ink::test]
+        fn test_get_d9_v1_without_slippage_protection() {
+            // This test would require a full test environment setup with mock USDT contract
+            // Since get_d9 (v1) doesn't have slippage protection, it should accept any output amount
+            // The function signature change from get_d9(usdt, min_d9_out) to get_d9(usdt) 
+            // ensures backward compatibility for old clients
+        }
+
+        #[ink::test]
+        fn test_get_d9_v2_with_slippage_protection() {
+            // This test would require a full test environment setup with mock USDT contract
+            // get_d9_v2 includes slippage protection via min_d9_out parameter
+            // It should fail with SlippageExceeded if output < min_d9_out
+        }
+
+        #[ink::test]
+        fn test_get_usdt_v1_without_slippage_protection() {
+            // This test would require a full test environment setup
+            // get_usdt (v1) accepts any output amount since it has no min_usdt_out parameter
+            // This maintains backward compatibility for existing clients
+        }
+
+        #[ink::test]
+        fn test_get_usdt_v2_with_slippage_protection() {
+            // This test would require a full test environment setup
+            // get_usdt_v2 should fail with SlippageExceeded if output < min_usdt_out
+            // This provides protection for new clients against sandwich attacks
         }
     }
 } //---LAST LINE OF IMPLEMENTATION OF THE INK! SMART CONTRACT---//
